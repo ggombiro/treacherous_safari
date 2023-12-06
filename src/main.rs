@@ -1,5 +1,8 @@
+use crate::game_state::{GameState, GameStates};
 use bevy::prelude::*;
 use rand::Rng;
+
+mod game_state;
 
 
 fn main() {
@@ -13,6 +16,7 @@ fn main() {
             }),
             ..default()
         }))
+        .insert_resource(GameState(GameStates::TileReveal))
         .insert_resource(MovementPoints(0))
         .add_systems(Startup, (setup))
         .add_systems(
