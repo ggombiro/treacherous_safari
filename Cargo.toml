@@ -13,3 +13,5 @@ opt-level = 3
 bevy = { version = "0.12", features = ["dynamic_linking"]}
 rand = "0.8.5"
 bevy_mod_picking = "0.17.0"
+bevy_utils = { version = "0.12", default-features = false }
+bevy_eventlistener = "0.6"
