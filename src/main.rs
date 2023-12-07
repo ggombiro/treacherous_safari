@@ -1,5 +1,5 @@
 use crate::game_state::{GameState, GameStates};
-use crate::movement::{MovementPoints, update_movement_points, create_movement_points};
+use crate::movement::{MovementPoints, update_movement_points, create_movement_points, MovementPointsUpdateEvent};
 use bevy::prelude::*;
 
 
@@ -21,11 +21,12 @@ fn main() {
         .insert_resource(GameState(GameStates::TileReveal))
         .insert_resource(MovementPoints(0))
         .add_systems(Startup, (setup))
+        .add_event::<MovementPointsUpdateEvent>()
         .add_systems(
             Update,
             (
                 create_movement_points,
-                update_movement_points.after(create_movement_points),
+                update_movement_points.run_if(on_event::<MovementPointsUpdateEvent>()),
             ),
         )
         .run()
