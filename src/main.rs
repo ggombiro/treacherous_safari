@@ -4,7 +4,8 @@ use bevy::{app::AppExit, log::LogPlugin};
 use bevy_eventlistener::prelude::*;
 use bevy_mod_picking::prelude::*;
 use bevy_utils::tracing::Level;
-use tiles::{setup_tiles, on_tile_selected, tile_selected_close, TileSelected, TileSelectedBlockerClose};
+use tiles::{setup_tiles, on_tile_selected, tile_selected_close, on_tile_setup_complete,
+    TileSelected, TileSelectedBlockerClose, TileSetupComplete};
 use movement::{MovementPoints, update_movement_points, create_movement_points, MovementPointsUpdateEvent};
 use game_state::{GameState, GameStates};
 
@@ -35,6 +36,7 @@ fn main() {
         .add_event::<MovementPointsUpdateEvent>()
         .add_event::<TileSelected>()
         .add_event::<TileSelectedBlockerClose>()
+        .add_event::<TileSetupComplete>()
         .add_systems(
             Update,
             (
@@ -42,6 +44,7 @@ fn main() {
                 update_movement_points.run_if(on_event::<MovementPointsUpdateEvent>()),
                 on_tile_selected.run_if(on_event::<TileSelected>()),
                 tile_selected_close.run_if(on_event::<TileSelectedBlockerClose>()),
+                on_tile_setup_complete.run_if(on_event::<TileSetupComplete>()),
             ),
         )
         .run()
