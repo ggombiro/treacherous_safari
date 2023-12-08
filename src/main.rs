@@ -4,7 +4,7 @@ use bevy::{app::AppExit, log::LogPlugin};
 use bevy_eventlistener::prelude::*;
 use bevy_mod_picking::prelude::*;
 use bevy_utils::tracing::Level;
-use tiles::{setup_tiles, on_tile_selected, TileSelected};
+use tiles::{setup_tiles, on_tile_selected, tile_selected_close, TileSelected, TileSelectedBlockerClose};
 use movement::{MovementPoints, update_movement_points, create_movement_points, MovementPointsUpdateEvent};
 use game_state::{GameState, GameStates};
 
@@ -34,12 +34,14 @@ fn main() {
             setup_tiles,))
         .add_event::<MovementPointsUpdateEvent>()
         .add_event::<TileSelected>()
+        .add_event::<TileSelectedBlockerClose>()
         .add_systems(
             Update,
             (
                 create_movement_points,
                 update_movement_points.run_if(on_event::<MovementPointsUpdateEvent>()),
                 on_tile_selected.run_if(on_event::<TileSelected>()),
+                tile_selected_close.run_if(on_event::<TileSelectedBlockerClose>()),
             ),
         )
         .run()
@@ -52,8 +54,6 @@ pub fn setup(
     commands.spawn(Camera2dBundle::default());
 
     // logging_next_state.set(debug::DebugPickingMode::Disabled);
-    // logging_next_state.set(debug::DebugPickingMode::Normal);
-
 }
 
 
