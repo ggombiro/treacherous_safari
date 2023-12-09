@@ -1,35 +1,41 @@
-use bevy::{prelude::*, sprite::MaterialMesh2dBundle, sprite::Anchor, ecs::system::EntityCommands};
+use bevy::{prelude::*, sprite::MaterialMesh2dBundle, sprite::Anchor, ecs::system::EntityCommands, input::common_conditions::input_toggle_active, text::TextPlugin};
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_mod_picking::prelude::*;
 use bevy::{app::AppExit, log::LogPlugin};
 use bevy_eventlistener::prelude::*;
 use bevy_mod_picking::prelude::*;
 use bevy_utils::tracing::Level;
 use tiles::{setup_tiles, on_tile_selected, tile_selected_close, on_tile_setup_complete,
-    TileSelected, TileSelectedBlockerClose, TileSetupComplete};
+    TileSelected, TileSelectedBlockerClose, TileSetupComplete, VisitedTiles};
 use movement::{MovementPoints, update_movement_points, create_movement_points, MovementPointsUpdateEvent};
 use game_state::{GameState, GameStates};
+use turns::TurnsLeft;
 
 
 mod game_state;
 mod movement;
 mod tiles;
+mod turns;
 
 
 fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins
+            .set(ImagePlugin::default_linear())
             .set(low_latency_window_plugin()),
-            // .set(LogPlugin {
-            //     filter: "bevy_mod_picking=trace".into(), // Show picking logs trace level and up
-            //     level: Level::ERROR, // Show all other logs only at the error level and up
-            // }),
+            
             DefaultPickingPlugins
                 .build()
                 .disable::<DefaultHighlightingPlugin>(),
             ))
+        .add_plugins(
+            WorldInspectorPlugin::default().run_if(input_toggle_active(false, KeyCode::Escape)),
+        )
         .insert_resource(GameState(GameStates::TileReveal))
+        .insert_resource(TurnsLeft(7))
         .insert_resource(MovementPoints(0))
+        .insert_resource(VisitedTiles(vec![0]))
         .add_systems(Startup, (
             setup,
             setup_tiles,))
