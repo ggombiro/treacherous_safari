@@ -4,20 +4,22 @@ use crate::movement::{
 };
 use bevy::{ecs::system::EntityCommands, prelude::*, sprite::Anchor, sprite::MaterialMesh2dBundle};
 use bevy_mod_picking::prelude::*;
+use rand::Rng;
 
 
 const FOCUS_SCALE: f32 = 0.1;
 const SELECTED_SCALE: f32 = 2.0;
 const BLOCKER_COLOR_VALUE: f32 = 0.7;
 
-#[derive(Component, Debug)]
+#[derive(Component, Debug, Clone)]
 pub struct Tile{
-    pub name: String,
+    pub cost: u32,
+    pub description: String,
     pub number: u32,
     pub neighbours: Vec<i32>,
     pub tile_type: TileType,
     pub value: i32,
-    pub duration: u32,
+    pub duration: i32,
     pub current: bool,
 }
 
@@ -42,6 +44,10 @@ pub fn setup_tiles(
     let len = 64.0;
     let height = 97.5;
     let sprite_size = Some(Vec2::new(len, height));
+    let mut tile_costs = vec![1,2];
+    let mut tile_res = generate_tiles();
+    let mut rng = rand::thread_rng();
+
 
     commands
         .spawn((
@@ -68,15 +74,47 @@ pub fn setup_tiles(
             const Y_STEP: f32 = 97.5;
             const SPACING: f32 = 50.0;
 
+            
+
             let mut counter = 0;
+            let mut tile_res_index: usize = 30;
 
             for x in 0..5 {
                 for y in 0..3 {
                     if (x == 0 || x == 4) && (y == 0 || y == 2) {
                         continue;
                     }
+                    
+                    if tile_costs.len() == 0{
+                        break;
+                    }
 
-                    let tile = commands.spawn((
+                    let rand_index = rng.gen_range(0..tile_costs.len());
+                    let tile_cost = tile_costs[rand_index];
+                    tile_costs.remove(rand_index);
+
+
+                    let mut indices = Vec::new();
+
+                    for (index, tile) in tile_res.iter_mut().enumerate(){
+                        if tile.cost == tile_cost{
+                            indices.push(index);
+                        }
+                    }
+
+                    if indices.len() == 0{
+                        break;
+                    }
+
+                    tile_res_index = rng.gen_range(0..indices.len());
+                    let tile = &mut tile_res[tile_res_index];
+                    
+
+                    tile.number = counter;
+                    tile.neighbours = get_neighbours(counter);
+                    tile.current= if counter == 0 {true} else{ false};
+
+                    commands.spawn((
                         SpriteBundle {
                             sprite: Sprite {
                                 custom_size: sprite_size,
@@ -91,18 +129,14 @@ pub fn setup_tiles(
                             ),
                             ..default()
                         },
-                        Tile{
-                            name: String::from(""),
-                            number: counter,
-                            neighbours: get_neighbours(counter),
-                            tile_type: TileType::Plain,
-                            value: 0,
-                            duration: 0,
-                            current: if counter == 0 {true} else{ false},
-                        },
+                        tile.clone(),
                     ));
 
                     counter += 1;
+                }
+                
+                if tile_res_index < tile_res.len() {
+                    tile_res.remove(tile_res_index);
                 }
             }
         });
@@ -250,7 +284,7 @@ pub fn tile_selected_close(
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub enum TileType {
     Plain,
     CurseMovementPoints,
@@ -285,12 +319,48 @@ pub fn on_tile_setup_complete(
     mut tile_selected: EventWriter<TileSelected>,
 ){
     for (entity, mut transform, mut tile) in &mut tiles {
+        info!("Tile: {:?}", tile);
         if tile.current {
-            info!("Tile: {:?}", tile);
+            info!("Current Tile: {:?}", tile);
             transform.scale.x += FOCUS_SCALE;
             transform.scale.y += FOCUS_SCALE;
 
             tile_selected.send(TileSelected(entity));
         }
     }
+}
+
+pub fn generate_tiles() -> Vec<Tile>{
+
+    let mut tile_res = Vec::with_capacity(2);
+         
+
+    let mut tile_1_0 = Tile{
+        cost : 1,
+        description: String::from("You come across some ruins. There is something glittering inside.\n
+        \"Don't touch that!\" Too late, you are cursed. -2 movement points on every turn."),
+        number: 0,
+        neighbours: vec![-1],
+        tile_type: TileType::CurseMovementPoints,
+        value: -2,
+        duration: -1,
+        current: false,
+    };
+
+    let mut tile_2_0 = Tile{
+        cost : 2,
+        description: String::from("You find yourself in a river.\n
+        -1 turn to swim across the river."),
+        number: 0,
+        neighbours: vec![-1],
+        tile_type: TileType::TurnReduction,
+        value: -1,
+        duration: 1,
+        current: false,
+    };
+
+    tile_res.push(tile_1_0);
+    tile_res.push(tile_2_0);
+
+    tile_res
 }
