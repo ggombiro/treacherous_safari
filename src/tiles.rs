@@ -44,6 +44,9 @@ pub struct TileSetupComplete;
 #[derive(Resource)]
 pub struct VisitedTiles(pub Vec<u32>);
 
+#[derive(Component)]
+pub struct Player;
+
 pub fn setup_tiles(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -134,13 +137,13 @@ pub fn setup_tiles(
                                 text: Text::from_section(
                                     format!("{}", &tile.cost),
                                     TextStyle {
-                                        font_size: 50.0,
-                                        color: Color::rgb(0.9, 0.9, 0.9),
+                                        font_size: 70.0,
+                                        color: Color::rgb(1.0, 1.0, 0.2),
                                         ..default()
                                     },
                                 ),
                                 transform: Transform {
-                                    translation: Vec3::new(0.0, 135.0, 1.0),
+                                    translation: Vec3::new(0.0, 140.0, 1.0),
                                     ..default()
                                 },
                                 text_anchor: Anchor::TopCenter,
@@ -235,7 +238,7 @@ pub fn setup_tiles(
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
                     left: Val::Percent(85.0),
-                    top: Val::Percent(5.0),
+                    top: Val::Percent(10.0),
                     ..default()
                 },
                 background_color: BackgroundColor(Color::RED),
@@ -263,6 +266,71 @@ pub fn setup_tiles(
                 Pickable::IGNORE,
             ));
         });
+
+        let len = 64.0 * 2.5;
+        let height = 64.0 * 2.5;
+        let piece_size = Some(Vec2::new(len, height));
+
+        commands.spawn((
+            SpatialBundle {
+                transform: Transform::from_scale(Vec3 {
+                    x: 0.3,
+                    y: 0.3,
+                    z: 1.0,
+                }),
+                ..default()
+            },
+        ))
+        .with_children(|commands| {
+
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        custom_size: piece_size,
+                        // color: Color::BLACK,
+                        ..default()
+                    },
+                    texture: asset_server.load("pieceYellow_border01.png"),
+                    transform: Transform::from_xyz(-256.0,160.0,0.0,
+                    ),
+                    ..default()
+                },
+                Player,
+                Pickable::IGNORE,
+            ));
+        });
+
+        let len = 64.0 * 4.0;
+        let height = 64.0 * 3.0;
+        let piece_size = Some(Vec2::new(len, height));
+
+        commands.spawn((
+            SpatialBundle {
+                transform: Transform::from_scale(Vec3 {
+                    x: 0.3,
+                    y: 0.3,
+                    z: 1.0,
+                }),
+                ..default()
+            },
+        ))
+        .with_children(|commands| {
+
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        custom_size: piece_size,
+                        // color: Color::BLACK,
+                        ..default()
+                    },
+                    texture: asset_server.load("pieceYellow_border12.png"),
+                    transform: Transform::from_xyz(1300.0,240.0,0.0,
+                    ),
+                    ..default()
+                },
+            ));
+        });
+
 
     tile_setup_complete.send(TileSetupComplete);
 }
@@ -329,10 +397,14 @@ pub fn tile_selected_close(
         &TileRevealBlockerCloseButton,
         Without<TileRevealBlocker>,
     )>,
+    mut player_query: Query<(&mut Transform, &Player), Without<Tile>>,
     mut visited_tiles: ResMut<VisitedTiles>,
     mut movement_points: ResMut<MovementPoints>,
     mut turns_left: ResMut<TurnsLeft>,
 ) {
+
+
+    let mut player = player_query.single_mut();
 
     let mut tile_clone  = Tile{..default()};
 
@@ -351,6 +423,10 @@ pub fn tile_selected_close(
             info!("Tile: {:?}", tile);
 
             //move PC
+            let mut diff = transform.translation - player.0.translation;
+
+            player.0.translation.x += diff.x;
+            player.0.translation.y += diff.y;
 
             tile_clone = tile.clone();
         }
@@ -519,7 +595,7 @@ pub fn generate_tiles() -> Vec<Tile> {
     let mut tile_2_1 = Tile {
         cost: 2,
         description: String::from(
-            "Village with nice people. They give you a reed bed. You sleep well. No more ailments or curses.",
+            "Village with nice people. They give you a reed bed. You sleep well. Remove ailments or curses.",
         ),
         number: 0,
         neighbours: vec![-1],
@@ -604,7 +680,7 @@ pub fn generate_tiles() -> Vec<Tile> {
     let mut tile_4_2 = Tile {
         cost: 4,
         description: String::from(
-            "Village with nice people. They give you a reed bed. You sleep well. No more ailments or curses.",
+            "Village with nice people. They give you a reed bed. You sleep well. Remove ailments or curses.",
         ),
         number: 0,
         neighbours: vec![-1],
@@ -700,7 +776,7 @@ pub fn generate_tiles() -> Vec<Tile> {
     let mut tile_7_1 = Tile {
         cost: 7,
         description: String::from(
-            "Village with nice people. They give you a reed bed. You sleep well. No more ailments or curses.",
+            "Village with nice people. They give you a reed bed. You sleep well. Remove ailments or curses.",
         ),
         number: 0,
         neighbours: vec![-1],

@@ -10,12 +10,14 @@ use tiles::{setup_tiles, on_tile_selected, tile_selected_close, on_tile_setup_co
 use movement::{MovementPoints, update_movement_points, create_movement_points, MovementPointsUpdateEvent};
 use game_state::{GameState, GameStates};
 use turns::TurnsLeft;
+use ui::setup_game_ui;
 
 
 mod game_state;
 mod movement;
 mod tiles;
 mod turns;
+mod ui;
 
 
 fn main() {
@@ -38,6 +40,7 @@ fn main() {
         .insert_resource(VisitedTiles(vec![0]))
         .add_systems(Startup, (
             setup,
+            setup_game_ui,
             setup_tiles,))
         .add_event::<MovementPointsUpdateEvent>()
         .add_event::<TileSelected>()
