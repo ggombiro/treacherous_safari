@@ -1,5 +1,4 @@
-
-use crate::movement::MovementPointsUpdateEvent;
+use crate::movement::{MovementCardsDrawnEvent, MovementPointsUpdateEvent};
 use crate::turns::TurnsUpdateEvent;
 use bevy::text::{BreakLineOn, Text2dBounds, TextLayoutInfo};
 use bevy::{ecs::system::EntityCommands, prelude::*, sprite::Anchor};
@@ -17,7 +16,6 @@ pub struct Tile {
     pub cost: u32,
     pub description: String,
     pub number: u32,
-    pub neighbours: Vec<i32>,
     pub tile_type: TileType,
     pub value: i32,
     pub duration: i32,
@@ -48,6 +46,9 @@ pub struct VisitedTiles(pub Vec<u32>);
 #[derive(Component)]
 pub struct Player;
 
+#[derive(Component)]
+pub struct TileHighlight(pub Entity);
+
 pub fn setup_tiles(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -71,18 +72,8 @@ pub fn setup_tiles(
             },
             PickableBundle::default(),
             On::<Pointer<Down>>::send_event::<TileSelected>(),
-            On::<Pointer<Over>>::target_component_mut::<Transform>(|_, transform| {
-                if transform.scale.x < FOCUS_SCALE + SELECTED_SCALE {
-                    transform.scale.x += FOCUS_SCALE;
-                    transform.scale.y += FOCUS_SCALE;
-                }
-            }),
-            On::<Pointer<Out>>::target_component_mut::<Transform>(|_, transform| {
-                if transform.scale.x < FOCUS_SCALE + SELECTED_SCALE {
-                    transform.scale.x -= FOCUS_SCALE;
-                    transform.scale.y -= FOCUS_SCALE;
-                }
-            }),
+            On::<Pointer<Over>>::send_event::<OverTile>(),
+            On::<Pointer<Out>>::send_event::<OffTile>(),
         ))
         .with_children(|commands| {
             const X_START: f32 = -64.0;
@@ -106,8 +97,8 @@ pub fn setup_tiles(
                     let tile = &mut tile_res[tile_res_index];
 
                     tile.number = counter;
-                    tile.neighbours = get_neighbours(counter);
-                    tile.current = if counter == 0 { true } else { false };
+
+                    // tile.current = if counter == 0 { true } else { false };
 
                     commands
                         .spawn((
@@ -191,6 +182,30 @@ pub fn setup_tiles(
                                 TileCover,
                                 Pickable::IGNORE,
                             ));
+
+                            let highlight_size = Some(Vec2::new(len + 20.0, height + 20.0));
+
+                            parent
+                                .spawn((
+                                    SpatialBundle {
+                                        transform: Transform::from_xyz(0.0,0.0, -1.1),
+                                        visibility: Visibility::Hidden,
+                                        ..Default::default()
+                                    },
+                                    TileHighlight(parent.parent_entity()),
+                                    Pickable::IGNORE,
+                                ))
+                                .with_children(|commands| {
+                                    commands.spawn((SpriteBundle {
+                                        sprite: Sprite {
+                                            custom_size: highlight_size,
+                                            color: Color::FUCHSIA,
+                                            ..default()
+                                        },
+                                        // texture: asset_server.load("images/boovy.png"),
+                                        ..default()
+                                    },));
+                                });
                         });
 
                     counter += 1;
@@ -268,22 +283,20 @@ pub fn setup_tiles(
             ));
         });
 
-        let len = 64.0 * 2.5;
-        let height = 64.0 * 2.5;
-        let piece_size = Some(Vec2::new(len, height));
+    let len = 64.0 * 2.5;
+    let height = 64.0 * 2.5;
+    let piece_size = Some(Vec2::new(len, height));
 
-        commands.spawn((
-            SpatialBundle {
-                transform: Transform::from_scale(Vec3 {
-                    x: 0.3,
-                    y: 0.3,
-                    z: 1.0,
-                }),
-                ..default()
-            },
-        ))
+    commands
+        .spawn((SpatialBundle {
+            transform: Transform::from_scale(Vec3 {
+                x: 0.3,
+                y: 0.3,
+                z: 1.0,
+            }),
+            ..default()
+        },))
         .with_children(|commands| {
-
             commands.spawn((
                 SpriteBundle {
                     sprite: Sprite {
@@ -292,8 +305,7 @@ pub fn setup_tiles(
                         ..default()
                     },
                     texture: asset_server.load("pieceYellow_border01.png"),
-                    transform: Transform::from_xyz(-256.0,160.0,0.0,
-                    ),
+                    transform: Transform::from_xyz(-256.0, 160.0, 0.0),
                     ..default()
                 },
                 Player,
@@ -301,37 +313,31 @@ pub fn setup_tiles(
             ));
         });
 
-        let len = 64.0 * 4.0;
-        let height = 64.0 * 3.0;
-        let piece_size = Some(Vec2::new(len, height));
+    let len = 64.0 * 4.0;
+    let height = 64.0 * 3.0;
+    let piece_size = Some(Vec2::new(len, height));
 
-        commands.spawn((
-            SpatialBundle {
-                transform: Transform::from_scale(Vec3 {
-                    x: 0.3,
-                    y: 0.3,
-                    z: 1.0,
-                }),
-                ..default()
-            },
-        ))
+    commands
+        .spawn((SpatialBundle {
+            transform: Transform::from_scale(Vec3 {
+                x: 0.3,
+                y: 0.3,
+                z: 1.0,
+            }),
+            ..default()
+        },))
         .with_children(|commands| {
-
-            commands.spawn((
-                SpriteBundle {
-                    sprite: Sprite {
-                        custom_size: piece_size,
-                        // color: Color::BLACK,
-                        ..default()
-                    },
-                    texture: asset_server.load("pieceYellow_border12.png"),
-                    transform: Transform::from_xyz(1300.0,240.0,0.0,
-                    ),
+            commands.spawn((SpriteBundle {
+                sprite: Sprite {
+                    custom_size: piece_size,
+                    // color: Color::BLACK,
                     ..default()
                 },
-            ));
+                texture: asset_server.load("pieceYellow_border12.png"),
+                transform: Transform::from_xyz(1300.0, 240.0, 0.0),
+                ..default()
+            },));
         });
-
 
     tile_setup_complete.send(TileSetupComplete);
 }
@@ -355,10 +361,10 @@ pub fn on_tile_selected(
         &TileRevealBlockerCloseButton,
         Without<TileRevealBlocker>,
     )>,
-    mut visited_tiles: ResMut<VisitedTiles>,
+    mut highlightables: Query<(&mut Visibility, &mut TileHighlight), 
+    (Without<TileRevealBlocker>, Without<TileRevealBlockerCloseButton>)>,
 ) {
     for (entity, mut transform, mut tile) in &mut tiles {
-        info!("Scale {:?} -> {}", transform.scale, FOCUS_SCALE + SELECTED_SCALE);
         if transform.scale.x > 1.0 {
             if transform.scale.x < FOCUS_SCALE + SELECTED_SCALE {
                 transform.scale.x += SELECTED_SCALE;
@@ -371,8 +377,62 @@ pub fn on_tile_selected(
                 let mut close_button = close_button.single_mut();
                 *close_button.0 = Visibility::Visible;
 
-                if !visited_tiles.0.iter().any(|t| *t == tile.number){
-                    visited_tiles.0.push(tile.number);
+                for(mut vis, mut highlight) in &mut highlightables{
+                    if highlight.0 == entity{
+                        *vis = Visibility::Hidden;
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[derive(Event)]
+pub struct OverTile(Entity);
+
+impl From<ListenerInput<Pointer<Over>>> for OverTile {
+    fn from(event: ListenerInput<Pointer<Over>>) -> Self {
+        OverTile(event.target)
+    }
+}
+
+pub fn on_over_tile(
+    mut commands: Commands,
+    mut events: EventReader<OverTile>,
+    mut tiles: Query<(Entity, &mut Transform), With<Selectable>>,
+) {
+    for ev in events.read() {
+        for (entity, mut transform) in &mut tiles {
+            if entity == ev.0 {
+                if transform.scale.x < FOCUS_SCALE + SELECTED_SCALE {
+                    transform.scale.x += FOCUS_SCALE;
+                    transform.scale.y += FOCUS_SCALE;
+                }
+            }
+        }
+    }
+}
+
+#[derive(Event)]
+pub struct OffTile(Entity);
+
+impl From<ListenerInput<Pointer<Out>>> for OffTile {
+    fn from(event: ListenerInput<Pointer<Out>>) -> Self {
+        OffTile(event.target)
+    }
+}
+
+pub fn on_off_tile(
+    mut commands: Commands,
+    mut events: EventReader<OffTile>,
+    mut tiles: Query<(Entity, &mut Transform), With<Selectable>>,
+) {
+    for ev in events.read() {
+        for (entity, mut transform) in &mut tiles {
+            if entity == ev.0 {
+                if transform.scale.x < FOCUS_SCALE + SELECTED_SCALE {
+                    transform.scale.x -= FOCUS_SCALE;
+                    transform.scale.y -= FOCUS_SCALE;
                 }
             }
         }
@@ -391,7 +451,7 @@ impl From<ListenerInput<Pointer<Click>>> for TileSelectedBlockerClose {
 pub fn tile_selected_close(
     mut commands: Commands,
     mut events: EventReader<TileSelectedBlockerClose>,
-    mut tiles: Query<(&mut Transform, &Tile)>,
+    mut tiles: Query<(Entity, &mut Transform, &mut Tile)>,
     mut blocker: Query<&mut Visibility, With<TileRevealBlocker>>,
     mut close_button: Query<(
         &mut Visibility,
@@ -404,13 +464,11 @@ pub fn tile_selected_close(
     mut turns_update: EventWriter<TurnsUpdateEvent>,
     mut tile_closed: EventWriter<TileClosedEvent>,
 ) {
-
-
     let mut player = player_query.single_mut();
 
-    let mut tile_clone  = Tile{..default()};
+    let mut tile_clone = Tile { ..default() };
 
-    for (mut transform, mut tile) in &mut tiles {
+    for (entity, mut transform, mut tile) in &mut tiles {
         if transform.scale.x > SELECTED_SCALE {
             transform.scale.x -= (FOCUS_SCALE + SELECTED_SCALE);
             transform.scale.y -= (FOCUS_SCALE + SELECTED_SCALE);
@@ -431,62 +489,66 @@ pub fn tile_selected_close(
             player.0.translation.y += diff.y;
 
             tile_clone = tile.clone();
+
+            tile.current = true;
+            // commands.entity(entity).insert(Selectable);
         }
+    }
+
+    if tile_clone.current {
+        return;
     }
 
     //check for add entity
 
-    match tile_clone.tile_type{
-        TileType::Plain => {},
+    match tile_clone.tile_type {
+        TileType::Plain => {}
         TileType::CurseMovementPoints => {
             info!("Curse movement");
             movement_points_update.send(MovementPointsUpdateEvent(tile_clone.value));
 
-            if tile_clone.duration != 0{
+            if tile_clone.duration != 0 {
                 //create or add to movement curse comp
             }
-        },
+        }
         TileType::MovementPointsAdd => {
-            
             movement_points_update.send(MovementPointsUpdateEvent(tile_clone.value));
 
-            if tile_clone.duration > 0{
-
-            }
-        },
+            if tile_clone.duration > 0 {}
+        }
         TileType::TurnReduction => {
             info!("Turn reduction");
             turns_update.send(TurnsUpdateEvent(tile_clone.value));
-        },
-        TileType::RouteRestriction => {
-            info!("Route restriction");
-            // create route restriction component
-        },
+        }
+        // TileType::RouteRestriction => {
+        //     info!("Route restriction");
+        //     // create route restriction component
+        // },
         TileType::MovementPointsSub => {
             info!("Movement sub");
             movement_points_update.send(MovementPointsUpdateEvent(tile_clone.value));
 
-            if tile_clone.duration > 0{
+            if tile_clone.duration > 0 {
                 //create or add to movement sub comp
             }
-        },
+        }
         TileType::Blessing => {
             info!("Blessing");
             //remove ailments components
-        },
-        TileType::StepBack => {
-            info!("Step back");
-            if visited_tiles.0.len() > 1{
-                let prev_tile = visited_tiles.0[visited_tiles.0.len() - 2];
+        }
+        // TileType::StepBack => {
+        //     info!("Step back");
+        //     if visited_tiles.0.len() > 1{
+        //         let prev_tile = visited_tiles.0[visited_tiles.0.len() - 2];
 
-                for (_, mut tile) in &mut tiles {
-                    if tile.number == prev_tile{
-                        //move PC to this tile
-                        break;
-                    }
-                }
-            }
-        },
+        //         for (_, mut tile) in &mut tiles {
+        //             if tile.number == prev_tile{
+        //                 //move PC to this tile
+        //                 break;
+        //             }
+        //         }
+        //     }
+        // },
     }
 
     tile_closed.send(TileClosedEvent);
@@ -494,17 +556,16 @@ pub fn tile_selected_close(
 
 #[derive(Debug, Clone, Default)]
 pub enum TileType {
-    #[default] Plain,
+    #[default]
+    Plain,
     CurseMovementPoints,
     MovementPointsAdd,
     TurnReduction,
-    RouteRestriction,
     MovementPointsSub,
     Blessing,
-    StepBack,
 }
 
-pub fn get_neighbours(index: u32) -> Vec<i32> {
+pub fn get_neighbours(index: u32) -> Vec<u32> {
     match index {
         0 => vec![1, 2, 3],
         1 => vec![2, 4, 5],
@@ -516,7 +577,7 @@ pub fn get_neighbours(index: u32) -> Vec<i32> {
         7 => vec![8, 10],
         8 => vec![7, 9, 10],
         9 => vec![8, 10],
-        _ => vec![-1],
+        _ => vec![0],
     }
 }
 
@@ -533,9 +594,7 @@ pub fn on_tile_setup_complete(
     turns_update.send(TurnsUpdateEvent(TURNS_INIT_VALUE));
 
     for (entity, mut transform, mut tile, mut children) in &mut tiles {
-        info!("Tile: {:?}", tile);
-        if tile.current {
-            info!("Current Tile: {:?}", tile);
+        if tile.number == 0 {
             for child in children {
                 if let Ok(mut vis) = tile_cover_query.get_mut(*child) {
                     *vis = Visibility::Hidden;
@@ -550,6 +609,44 @@ pub fn on_tile_setup_complete(
     }
 }
 
+pub fn on_turn_ended(
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut Tile)>,
+    mut highlightables: Query<(&mut Visibility, &mut TileHighlight)>,
+    mut events: EventReader<MovementCardsDrawnEvent>, //should listen to turn ended event
+) {
+    let mut tile_number = 0;
+
+    for (entity, mut tile) in &mut query {
+        commands.entity(entity).remove::<Selectable>();
+
+        for(mut vis, mut highlight) in &mut highlightables{
+            if highlight.0 == entity{
+                *vis = Visibility::Hidden;
+            }
+        }
+
+        if tile.current {
+            tile.current = false;
+            tile_number = tile.number;
+        }
+    }
+
+    let mut neighbours = get_neighbours(tile_number);
+
+    for (entity, mut tile) in &mut query {
+        if neighbours.contains(&tile.number) {
+            commands.entity(entity).insert(Selectable);
+
+            for(mut vis, mut highlight) in &mut highlightables{
+                if highlight.0 == entity{
+                    *vis = Visibility::Visible;
+                }
+            }
+        }
+    }
+}
+
 pub fn generate_tiles() -> Vec<Tile> {
     let mut tile_res = Vec::with_capacity(2);
 
@@ -559,7 +656,6 @@ pub fn generate_tiles() -> Vec<Tile> {
             "You find ruins with a shiny object. \"Stop!\" You touch it and get cursed. Lose 2 movement points each turn.",
         ),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::CurseMovementPoints,
         value: -2,
         duration: -1,
@@ -572,7 +668,6 @@ pub fn generate_tiles() -> Vec<Tile> {
             "Tree with strange fruit. You bite it, \"yum.\" Gain 1 movement point.",
         ),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::MovementPointsAdd,
         value: 1,
         duration: 0,
@@ -583,7 +678,6 @@ pub fn generate_tiles() -> Vec<Tile> {
         cost: 1,
         description: String::from("Lion fight. You survive. Lose 2 movement points."),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::MovementPointsSub,
         value: -2,
         duration: 0,
@@ -594,7 +688,6 @@ pub fn generate_tiles() -> Vec<Tile> {
         cost: 2,
         description: String::from("River! You have to swim across, lose 1 turn."),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::TurnReduction,
         value: -1,
         duration: 0,
@@ -607,7 +700,6 @@ pub fn generate_tiles() -> Vec<Tile> {
             "Village with nice people. They give you a reed bed. You sleep well. Remove ailments or curses.",
         ),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::Blessing,
         value: 0,
         duration: 0,
@@ -618,7 +710,6 @@ pub fn generate_tiles() -> Vec<Tile> {
         cost: 2,
         description: String::from("Cool breeze. Adventure time."),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::Plain,
         value: 0,
         duration: 0,
@@ -642,7 +733,6 @@ pub fn generate_tiles() -> Vec<Tile> {
             "Snake bite. You are poisoned. Lose 1 movement point for 2 turns.",
         ),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::MovementPointsSub,
         value: -1,
         duration: 2,
@@ -655,7 +745,6 @@ pub fn generate_tiles() -> Vec<Tile> {
             "Tree with strange fruit. You bite it, \"yum.\" Gain 1 movement point.",
         ),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::MovementPointsAdd,
         value: 1,
         duration: 0,
@@ -666,7 +755,6 @@ pub fn generate_tiles() -> Vec<Tile> {
         cost: 4,
         description: String::from("River! You have to swim across, lose 1 turn."),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::TurnReduction,
         value: -1,
         duration: 0,
@@ -679,7 +767,6 @@ pub fn generate_tiles() -> Vec<Tile> {
             "You find ruins with a shiny object. \"Stop!\" You touch it and get cursed. Lose 2 movement points each turn.",
         ),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::CurseMovementPoints,
         value: -2,
         duration: -1,
@@ -692,7 +779,6 @@ pub fn generate_tiles() -> Vec<Tile> {
             "Village with nice people. They give you a reed bed. You sleep well. Remove ailments or curses.",
         ),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::Blessing,
         value: -1,
         duration: 0,
@@ -705,7 +791,6 @@ pub fn generate_tiles() -> Vec<Tile> {
             "You find ruins with a shiny object. \"Stop!\" You touch it and get cursed. Lose 2 movement points each turn.",
         ),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::CurseMovementPoints,
         value: -2,
         duration: -1,
@@ -718,7 +803,6 @@ pub fn generate_tiles() -> Vec<Tile> {
             "Tree with strange fruit. You bite it, \"yum.\" Gain 1 movement point.",
         ),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::MovementPointsAdd,
         value: 1,
         duration: 0,
@@ -731,7 +815,6 @@ pub fn generate_tiles() -> Vec<Tile> {
             "You befriend an elephant. You ride on its back. Gain 2 movement points.",
         ),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::MovementPointsAdd,
         value: 2,
         duration: 0,
@@ -742,7 +825,6 @@ pub fn generate_tiles() -> Vec<Tile> {
         cost: 6,
         description: String::from("Lion fight. You survive. Lose 2 movement points."),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::MovementPointsSub,
         value: -2,
         duration: 0,
@@ -753,7 +835,6 @@ pub fn generate_tiles() -> Vec<Tile> {
         cost: 6,
         description: String::from("Cool breeze. Adventure time."),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::Plain,
         value: 0,
         duration: 0,
@@ -775,7 +856,6 @@ pub fn generate_tiles() -> Vec<Tile> {
         cost: 7,
         description: String::from("River! You have to swim across, lose 1 turn."),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::TurnReduction,
         value: -1,
         duration: 0,
@@ -788,7 +868,6 @@ pub fn generate_tiles() -> Vec<Tile> {
             "Village with nice people. They give you a reed bed. You sleep well. Remove ailments or curses.",
         ),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::Blessing,
         value: -1,
         duration: 0,
@@ -799,7 +878,6 @@ pub fn generate_tiles() -> Vec<Tile> {
         cost: 7,
         description: String::from("Lion fight. You survive. Lose 2 movement points."),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::MovementPointsSub,
         value: -2,
         duration: 0,
@@ -812,7 +890,6 @@ pub fn generate_tiles() -> Vec<Tile> {
             "You befriend an elephant. You ride on its back. Gain 2 movement points.",
         ),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::MovementPointsAdd,
         value: 2,
         duration: 0,
@@ -836,7 +913,6 @@ pub fn generate_tiles() -> Vec<Tile> {
             "Snake bite. You are poisoned. Lose 1 movement point for 2 turns.",
         ),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::MovementPointsSub,
         value: -1,
         duration: 2,
@@ -849,7 +925,6 @@ pub fn generate_tiles() -> Vec<Tile> {
             "Snake bite. You are poisoned. Lose 1 movement point for 2 turns.",
         ),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::MovementPointsSub,
         value: -1,
         duration: 2,
@@ -862,7 +937,6 @@ pub fn generate_tiles() -> Vec<Tile> {
             "You befriend an elephant. You ride on its back. Gain 2 movement points.",
         ),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::MovementPointsAdd,
         value: 2,
         duration: 0,
@@ -873,7 +947,6 @@ pub fn generate_tiles() -> Vec<Tile> {
         cost: 9,
         description: String::from("Cool breeze. Adventure time."),
         number: 0,
-        neighbours: vec![-1],
         tile_type: TileType::Plain,
         value: 0,
         duration: 0,

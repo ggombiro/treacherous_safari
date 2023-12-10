@@ -6,12 +6,22 @@ use bevy::{
 use bevy_mod_picking::prelude::*;
 use rand::Rng;
 
-use crate::{tiles::TileClosedEvent, ui::MovementPointsText};
+use crate::{movement::MovementCardsDrawnEvent, tiles::TileClosedEvent, ui::MovementPointsText};
 
 const CARDS_TO_DRAW: u32 = 8;
 const FOCUS_SCALE: f32 = 0.1;
-const SELECTED_SCALE: f32 = 2.0;
+const SELECTED_SCALE: f32 = 1.4;
 const BLOCKER_COLOR_VALUE: f32 = 0.1;
+
+const X_START: f32 = -1700.0;
+const X_STEP: f32 = 300.0;
+const Y_START: f32 = -200.0;
+const Y_STEP: f32 = 370.0;
+const SPACING: f32 = 150.0;
+
+const X_FINAL: f32 = -1300.0;
+const Y_FINAL: f32 = -800.0;
+const FINAL_SCALE: f32 = 1.3;
 
 #[derive(Component)]
 pub struct SpecialCardRevealBlocker;
@@ -35,7 +45,13 @@ pub struct SpecialCardCover;
 pub struct MovementCardDrawn;
 
 #[derive(Component)]
-pub struct MovementCardDiscarded;
+pub struct SpecialCardDiscarded;
+
+#[derive(Component)]
+pub struct SpecialCardSelectable;
+
+#[derive(Component)]
+pub struct SpecialCardHighlight(pub Entity);
 
 #[derive(Component, Debug, Clone, Default)]
 pub struct SpecialCard {
@@ -47,9 +63,9 @@ pub struct SpecialCard {
 }
 
 // pub fn on_special_card_closed_event(
-//     mut commands: Commands, 
+//     mut commands: Commands,
 //     mut events: EventReader<TileClosedEvent>,
-//     mut playable_cards_query: Query<(Entity, &mut Transform , &mut MovementCard), 
+//     mut playable_cards_query: Query<(Entity, &mut Transform , &mut MovementCard),
 //     (Without<MovementCardDrawn>, Without<MovementCardDiscarded>)>,
 //     mut cards_drawn: EventWriter<MovementCardsDrawnEvent>,
 // ) {
@@ -72,12 +88,7 @@ pub struct SpecialCard {
 //     cards_drawn.send(MovementCardsDrawnEvent);
 // }
 
-
-
-pub fn setup_special_cards(
-    mut commands: Commands, 
-    asset_server: Res<AssetServer>
-) {
+pub fn setup_special_cards(mut commands: Commands, asset_server: Res<AssetServer>) {
     let len = 300.0;
     let height = 450.0;
     let sprite_size = Some(Vec2::new(len, height));
@@ -94,33 +105,16 @@ pub fn setup_special_cards(
                 ..default()
             },
             PickableBundle::default(),
-            // On::<Pointer<Down>>::send_event::<SpecialCardSelected>(),
-            // On::<Pointer<Over>>::target_component_mut::<Transform>(|_, transform| {
-            //     if transform.scale.x < FOCUS_SCALE + SELECTED_SCALE {
-            //         transform.scale.x += FOCUS_SCALE;
-            //         transform.scale.y += FOCUS_SCALE;
-            //     }
-            // }),
-            // On::<Pointer<Out>>::target_component_mut::<Transform>(|_, transform| {
-            //     if transform.scale.x < FOCUS_SCALE + SELECTED_SCALE {
-            //         transform.scale.x -= FOCUS_SCALE;
-            //         transform.scale.y -= FOCUS_SCALE;
-            //     }
-            // }),
+            On::<Pointer<Down>>::send_event::<SpecialCardSelected>(),
+            On::<Pointer<Over>>::send_event::<OverSpecialCard>(),
+            On::<Pointer<Out>>::send_event::<OffSpecialCard>(),
         ))
         .with_children(|commands| {
-            const X_START: f32 = -1900.0;
-            const X_STEP: f32 = 300.0;
-            const Y_START: f32 = 0.0;
-            const Y_STEP: f32 = 370.0;
-            const SPACING: f32 = 150.0;
-
             let mut counter = 0;
             let mut card_res_index: usize = 30;
 
             for x in 0..4 {
                 for y in 0..2 {
-
                     let mut rng = rand::thread_rng();
 
                     card_res_index = rng.gen_range(0..card_res.len());
@@ -136,7 +130,7 @@ pub fn setup_special_cards(
                                 },
                                 texture: asset_server.load("cardBack_red1.png"),
                                 transform: Transform::from_xyz(
-                                    (X_START + (x as f32 * X_STEP)) + (x as f32 * (SPACING/2.0)),
+                                    (X_START + (x as f32 * X_STEP)) + (x as f32 * (SPACING / 2.0)),
                                     (Y_START + (y as f32 * Y_STEP)) + (y as f32 * (SPACING)),
                                     -1.0,
                                 ),
@@ -219,6 +213,30 @@ pub fn setup_special_cards(
                                 SpecialCardCover,
                                 Pickable::IGNORE,
                             ));
+
+                            let highlight_size = Some(Vec2::new(len + 20.0, height + 20.0));
+
+                            parent
+                                .spawn((
+                                    SpatialBundle {
+                                        transform: Transform::from_xyz(0.0, 0.0, -1.1),
+                                        visibility: Visibility::Hidden,
+                                        ..Default::default()
+                                    },
+                                    SpecialCardHighlight(parent.parent_entity()),
+                                    Pickable::IGNORE,
+                                ))
+                                .with_children(|commands| {
+                                    commands.spawn((SpriteBundle {
+                                        sprite: Sprite {
+                                            custom_size: highlight_size,
+                                            color: Color::FUCHSIA,
+                                            ..default()
+                                        },
+                                        // texture: asset_server.load("images/boovy.png"),
+                                        ..default()
+                                    },));
+                                });
                         });
 
                     counter += 1;
@@ -275,7 +293,7 @@ pub fn setup_special_cards(
                 visibility: Visibility::Hidden,
                 ..default()
             },
-            // On::<Pointer<Click>>::send_event::<TileSelectedBlockerClose>(),
+            On::<Pointer<Click>>::send_event::<SpecialCardSelectedBlockerClose>(),
             NoDeselect,
             SpecialCardRevealBlockerCloseButton,
         ))
@@ -295,7 +313,6 @@ pub fn setup_special_cards(
                 Pickable::IGNORE,
             ));
         });
-
 }
 
 #[derive(Event)]
@@ -307,43 +324,242 @@ impl From<ListenerInput<Pointer<Down>>> for SpecialCardSelected {
     }
 }
 
-// pub fn on_special_card_selected(
-//     mut commands: Commands,
-//     mut events: EventReader<SpecialCardSelected>,
-//     mut tiles: Query<(Entity, &mut Transform, &mut Tile)>,
-//     mut blocker: Query<&mut Visibility, With<TileRevealBlocker>>,
-//     mut close_button: Query<(
-//         &mut Visibility,
-//         &TileRevealBlockerCloseButton,
-//         Without<TileRevealBlocker>,
-//     )>,
-//     mut visited_tiles: ResMut<VisitedTiles>,
-// ) {
-//     for (entity, mut transform, mut tile) in &mut tiles {
-//         info!("Scale {:?} -> {}", transform.scale, FOCUS_SCALE + SELECTED_SCALE);
-//         if transform.scale.x > 1.0 {
-//             if transform.scale.x < FOCUS_SCALE + SELECTED_SCALE {
-//                 transform.scale.x += SELECTED_SCALE;
-//                 transform.scale.y += SELECTED_SCALE;
-//                 transform.translation.z = 1.0;
+pub fn on_special_card_selected(
+    mut commands: Commands,
+    mut events: EventReader<SpecialCardSelected>,
+    mut cards: Query<(Entity, &mut Transform, &mut SpecialCard, &Children)>,
+    mut card_cover_query: Query<
+        &mut Visibility,
+        (
+            With<SpecialCardCover>,
+            Without<SpecialCardRevealBlocker>,
+            Without<SpecialCardRevealBlockerCloseButton>,
+        ),
+    >,
+    mut blocker: Query<&mut Visibility, With<SpecialCardRevealBlocker>>,
+    mut close_button: Query<(
+        &mut Visibility,
+        &SpecialCardRevealBlockerCloseButton,
+        Without<SpecialCardRevealBlocker>,
+    )>,
+    mut highlightables: Query<
+        (&mut Visibility, &mut SpecialCardHighlight),
+        (
+            Without<SpecialCardRevealBlocker>,
+            Without<SpecialCardRevealBlockerCloseButton>,
+            Without<SpecialCardCover>,
+        ),
+    >,
+) {
+    for (entity, mut transform, mut tile, mut children) in &mut cards {
+        if transform.scale.x > 1.0 {
+            if transform.scale.x < FOCUS_SCALE + SELECTED_SCALE {
+                transform.scale.x += SELECTED_SCALE;
+                transform.scale.y += SELECTED_SCALE;
+                transform.translation.z = 1.0;
 
-//                 let mut blocker = blocker.single_mut();
-//                 *blocker = Visibility::Visible;
+                let mut blocker = blocker.single_mut();
+                *blocker = Visibility::Visible;
 
-//                 let mut close_button = close_button.single_mut();
-//                 *close_button.0 = Visibility::Visible;
+                let mut close_button = close_button.single_mut();
+                *close_button.0 = Visibility::Visible;
 
-//                 if !visited_tiles.0.iter().any(|t| *t == tile.number){
-//                     visited_tiles.0.push(tile.number);
-//                 }
-//             }
-//         }
-//     }
-// }
+                for (mut vis, mut highlight) in &mut highlightables {
+                    if highlight.0 == entity {
+                        *vis = Visibility::Hidden;
+                    }
+                }
+
+                for child in children {
+                    if let Ok(mut vis) = card_cover_query.get_mut(*child) {
+                        *vis = Visibility::Hidden;
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[derive(Event)]
+pub struct OverSpecialCard(Entity);
+
+impl From<ListenerInput<Pointer<Over>>> for OverSpecialCard {
+    fn from(event: ListenerInput<Pointer<Over>>) -> Self {
+        OverSpecialCard(event.target)
+    }
+}
+
+pub fn on_over_special_card(
+    mut commands: Commands,
+    mut events: EventReader<OverSpecialCard>,
+    mut tiles: Query<(Entity, &mut Transform), With<SpecialCardSelectable>>,
+) {
+    for ev in events.read() {
+        for (entity, mut transform) in &mut tiles {
+            if entity == ev.0 {
+                if transform.scale.x < FOCUS_SCALE + SELECTED_SCALE {
+                    transform.scale.x += FOCUS_SCALE;
+                    transform.scale.y += FOCUS_SCALE;
+                }
+            }
+        }
+    }
+}
+
+#[derive(Event)]
+pub struct OffSpecialCard(Entity);
+
+impl From<ListenerInput<Pointer<Out>>> for OffSpecialCard {
+    fn from(event: ListenerInput<Pointer<Out>>) -> Self {
+        OffSpecialCard(event.target)
+    }
+}
+
+pub fn on_off_special_card(
+    mut commands: Commands,
+    mut events: EventReader<OffSpecialCard>,
+    mut tiles: Query<(Entity, &mut Transform), With<SpecialCardSelectable>>,
+) {
+    for ev in events.read() {
+        for (entity, mut transform) in &mut tiles {
+            if entity == ev.0 {
+                if transform.scale.x < FOCUS_SCALE + SELECTED_SCALE {
+                    transform.scale.x -= FOCUS_SCALE;
+                    transform.scale.y -= FOCUS_SCALE;
+                }
+            }
+        }
+    }
+}
+
+pub fn on_movement_cards_drawn(
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut SpecialCard), Without<SpecialCardDiscarded>>,
+    mut highlightables: Query<(&mut Visibility, &mut SpecialCardHighlight)>,
+    mut events: EventReader<MovementCardsDrawnEvent>, //should listen to turn ended event
+) {
+    let mut tile_number = 0;
+
+    for (entity, mut card) in &mut query {
+        commands.entity(entity).insert(SpecialCardSelectable);
+
+        for (mut vis, mut highlight) in &mut highlightables {
+            if highlight.0 == entity {
+                *vis = Visibility::Visible;
+            }
+        }
+    }
+}
+
+#[derive(Clone, Event)]
+pub struct SpecialCardSelectedBlockerClose(Entity);
+
+impl From<ListenerInput<Pointer<Click>>> for SpecialCardSelectedBlockerClose {
+    fn from(event: ListenerInput<Pointer<Click>>) -> Self {
+        SpecialCardSelectedBlockerClose(event.target)
+    }
+}
+
+pub fn selected_special_card_close(
+    mut commands: Commands,
+    mut events: EventReader<SpecialCardSelectedBlockerClose>,
+    mut cards: Query<(Entity, &mut Transform, &mut SpecialCard)>,
+    mut blocker: Query<&mut Visibility, With<SpecialCardRevealBlocker>>,
+    mut close_button: Query<(
+        &mut Visibility,
+        &SpecialCardRevealBlockerCloseButton,
+        Without<SpecialCardRevealBlocker>,
+    )>,
+    mut special_card_closed: EventWriter<TileClosedEvent>,
+    mut highlightables: Query<
+        (&mut Visibility, &mut SpecialCardHighlight),
+        (
+            Without<SpecialCardRevealBlocker>,
+            Without<SpecialCardRevealBlockerCloseButton>,
+        ),
+    >,
+) {
+    let mut card_clone = SpecialCard { ..default() };
+
+    for (entity, mut transform, mut card) in &mut cards {
+        commands.entity(entity).remove::<SpecialCardSelectable>();
+
+        for (mut vis, mut highlight) in &mut highlightables {
+            if highlight.0 == entity {
+                *vis = Visibility::Hidden;
+            }
+        }
+
+        if transform.scale.x > SELECTED_SCALE {
+            transform.scale.x = FINAL_SCALE;
+            transform.scale.y = FINAL_SCALE;
+            transform.translation.z = -1.0;
+
+            let mut blocker = blocker.single_mut();
+            *blocker = Visibility::Hidden;
+
+            let mut close_button = close_button.single_mut();
+            *close_button.0 = Visibility::Hidden;
+
+            info!("Tile: {:?}", card);
+
+            commands.entity(entity).insert(SpecialCardDiscarded);
+
+
+            let diff_x = X_FINAL - transform.translation.x;
+            let diff_y = Y_FINAL - transform.translation.y;
+
+            transform.translation.x += diff_x;
+            transform.translation.y+= diff_y;
+
+            let mut rng = rand::thread_rng();
+
+            transform.rotate_z(rng.gen_range(-0.1..=0.1));
+        }
+    }
+
+    //check for add entity
+
+    match card_clone.card_type {
+        CardType::DrawMovementCard => {
+            if card_clone.value == 2{
+                //discard hand and then draw 2
+            }
+            else if card_clone.value == 1{
+                //draw 1 card
+            }
+        },
+        CardType::MovementPointsAddCard => todo!(),
+        CardType::MovementPointsAdd => todo!(),
+        CardType::TurnSub => todo!(),
+        CardType::TurnAdd => todo!(),
+        CardType::MovementPointsSubCard => todo!(),
+        CardType::MovementPointsSub => todo!(),
+        CardType::MovementPointsSubCardHighest => todo!(),
+        CardType::CurrentTileCostDirectChange => todo!(),
+        CardType::CurrentTileCostIndirectChange => todo!(),
+        CardType::MovementPointsMultiplyLeastCard => todo!(),
+        CardType::MovementPointsReductionAllCards => todo!(),
+        CardType::Erase => todo!(),
+
+    // TileType::Plain => {}
+    // TileType::CurseMovementPoints => {
+    //     info!("Curse movement");
+    //     movement_points_update.send(MovementPointsUpdateEvent(card_clone.value));
+
+    //     if card_clone.duration != 0 {
+    //         //create or add to movement curse comp
+    //     }
+    // }
+    }
+
+    // special_card_closed.send(TileClosedEvent);
+}
 
 #[derive(Debug, Clone, Default)]
 pub enum CardType {
-     #[default]DrawMovementCard,
+    #[default]
+    DrawMovementCard,
     MovementPointsAddCard,
     MovementPointsAdd,
     TurnSub,
@@ -372,7 +588,9 @@ pub fn generate_cards() -> Vec<SpecialCard> {
     let mut card_2 = SpecialCard {
         name: String::from("Motivity"),
         tag: String::from("<Nice>"),
-        description: String::from("Double the movement points of the card in your hand with the least movement points"),
+        description: String::from(
+            "Double the movement points of the card in your hand with the least movement points",
+        ),
         value: 2,
         card_type: CardType::MovementPointsMultiplyLeastCard,
     };
@@ -470,7 +688,7 @@ pub fn generate_cards() -> Vec<SpecialCard> {
         tag: String::from("<Nice>"),
         description: String::from("Erase the cost and effects of the current tile"),
         value: 0,
-        card_type: CardType::Erase
+        card_type: CardType::Erase,
     };
 
     card_res.push(card_1);
@@ -487,7 +705,6 @@ pub fn generate_cards() -> Vec<SpecialCard> {
     card_res.push(card_12);
     card_res.push(card_13);
     card_res.push(card_14);
-
 
     card_res
 }

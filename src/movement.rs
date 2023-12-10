@@ -23,6 +23,9 @@ pub struct DrawCardEvent;
 #[derive(Event)]
 pub struct MovementCardsDrawnEvent;
 
+#[derive(Event)]
+pub struct MovementCardsPlayedEvent;
+
 #[derive(Component)]
 pub struct MovementCardCover;
 

@@ -3,13 +3,16 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_mod_picking::prelude::*;
 use bevy::{app::AppExit, log::LogPlugin};
 use tiles::{setup_tiles, on_tile_selected, tile_selected_close, on_tile_setup_complete,
-    TileSelected, TileSelectedBlockerClose, TileSetupComplete, VisitedTiles, TileClosedEvent};
+    TileSelected, TileSelectedBlockerClose, TileSetupComplete, VisitedTiles, TileClosedEvent, OverTile, 
+    on_over_tile, on_turn_ended, OffTile, on_off_tile};
 use movement::{MovementPoints, update_movement_points, MovementPointsUpdateEvent, 
     on_tile_closed_event, setup_movement_cards, DrawCardEvent, on_draw_card, MovementCardsDrawnEvent};
 use game_state::{GameState, GameStates};
 use turns::{TurnsLeft, TurnsUpdateEvent, update_turns_left};
 use ui::setup_game_ui;
-use special_cards::{setup_special_cards, SpecialCardPlayedEvent, SpecialCardSelected};
+use special_cards::{setup_special_cards, on_movement_cards_drawn, SpecialCardPlayedEvent, SpecialCardSelected, 
+    OverSpecialCard, OffSpecialCard, on_over_special_card, on_off_special_card, on_special_card_selected, 
+    SpecialCardSelectedBlockerClose, selected_special_card_close};
 
 
 mod game_state;
@@ -53,6 +56,11 @@ fn main() {
         .add_event::<DrawCardEvent>()
         .add_event::<MovementCardsDrawnEvent>()
         .add_event::<SpecialCardSelected>()
+        .add_event::<OverTile>()
+        .add_event::<OffTile>()
+        .add_event::<OverSpecialCard>()
+        .add_event::<OffSpecialCard>()
+        .add_event::<SpecialCardSelectedBlockerClose>()
         .add_systems(
             Update,
             (
@@ -63,7 +71,15 @@ fn main() {
                 on_tile_setup_complete.run_if(on_event::<TileSetupComplete>()),
                 on_tile_closed_event.run_if(on_event::<TileClosedEvent>()),
                 on_draw_card.run_if(on_event::<DrawCardEvent>()),
+                on_over_tile.run_if(on_event::<OverTile>()),
+                on_off_tile.run_if(on_event::<OffTile>()),
+                on_movement_cards_drawn.run_if(on_event::<MovementCardsDrawnEvent>()),
+                on_over_special_card.run_if(on_event::<OverSpecialCard>()),
+                on_off_special_card.run_if(on_event::<OffSpecialCard>()),
+                on_special_card_selected.run_if(on_event::<SpecialCardSelected>()),
+                selected_special_card_close.run_if(on_event::<SpecialCardSelectedBlockerClose>()),
             ),
+
         )
         .run()
 }
