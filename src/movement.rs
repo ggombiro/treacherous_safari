@@ -5,11 +5,14 @@ use bevy::{
 };
 use rand::Rng;
 
-use crate::{tiles::TileClosedEvent, ui::MovementPointsText};
+use crate::{tiles::TileClosedEvent, ui::MovementPointsText, special_cards::SpecialCardClosed};
 
 const CARDS_TO_DRAW: u32 = 2;
 const DRAWN_CARDS_START: f32 = 1400.0;
 const DRAWN_CARDS_SPACE: f32 = 400.0;
+
+const X_FINAL: f32 = 1400.0;
+const Y_FINAL: f32 = 0.0;
 
 #[derive(Resource)]
 pub struct MovementPoints(pub i32);
@@ -18,7 +21,7 @@ pub struct MovementPoints(pub i32);
 pub struct MovementPointsUpdateEvent(pub i32);
 
 #[derive(Event)]
-pub struct DrawCardEvent;
+pub struct DrawCardEvent(pub u32);
 
 #[derive(Event)]
 pub struct MovementCardsDrawnEvent;
@@ -27,13 +30,16 @@ pub struct MovementCardsDrawnEvent;
 pub struct MovementCardsPlayedEvent;
 
 #[derive(Component)]
-pub struct MovementCardCover;
+pub struct MovementCardCover(pub Entity);
 
 #[derive(Component)]
 pub struct MovementCardDrawn;
 
 #[derive(Component)]
 pub struct MovementCardDiscarded;
+
+#[derive(Component)]
+pub struct CardPointsText;
 
 #[derive(Component, Debug, Clone, Default)]
 pub struct MovementCard {
@@ -59,22 +65,28 @@ pub fn update_movement_points(
 pub fn on_tile_closed_event(
     mut commands: Commands, 
     mut events: EventReader<TileClosedEvent>,
-    mut playable_cards_query: Query<(Entity, &mut Transform , &mut MovementCard), 
+    mut playable_cards_query: Query<(Entity, &mut Transform , &mut MovementCard, &Children), 
     (Without<MovementCardDrawn>, Without<MovementCardDiscarded>)>,
     mut cards_drawn: EventWriter<MovementCardsDrawnEvent>,
+    mut card_cover: Query<&mut Visibility, With<MovementCardCover>>,
 ) {
     let mut count = 0;
 
-    for (entity, mut transform, mut card) in &mut playable_cards_query{
+    for (entity, mut transform, mut card, mut children) in &mut playable_cards_query{
         if count == CARDS_TO_DRAW{
             break;
         }
 
+        for child in children {
+            if let Ok(mut vis) = card_cover.get_mut(*child) {
+                *vis = Visibility::Hidden;
+            }
+        }
+
         transform.translation.x -= (DRAWN_CARDS_START - (DRAWN_CARDS_SPACE * count as f32));
 
-        let mut child = commands.spawn(MovementCardDrawn).id();
 
-        commands.entity(entity).add_child(child);
+        commands.entity(entity).insert(MovementCardDrawn);
 
         count += 1;
     }
@@ -85,18 +97,96 @@ pub fn on_tile_closed_event(
 pub fn on_draw_card(
     mut commands: Commands, 
     mut events: EventReader<DrawCardEvent>,
-    mut playable_cards_query: Query<(Entity, &mut Transform , &mut MovementCard), (Without<MovementCardDrawn>, Without<MovementCardDiscarded>)>
+    mut playable_cards_query: Query<(Entity, &mut Transform , &mut MovementCard, &Children), 
+    (Without<MovementCardDrawn>, Without<MovementCardDiscarded>)>,
+    mut drawn_cards_query: Query<(Entity, &mut Transform , &mut MovementCard, &Children), 
+    (With<MovementCardDrawn>, Without<MovementCardDiscarded>)>,
+    mut card_cover: Query<&mut Visibility, With<MovementCardCover>>,
 ) {
-    for (entity,mut transform, mut card) in &mut playable_cards_query{
 
-        transform.translation.x -= (DRAWN_CARDS_START - (DRAWN_CARDS_SPACE * 2.0));
+    let mut count = 0;
 
-        let mut child = commands.spawn(MovementCardDrawn).id();
-
-        commands.entity(entity).add_child(child);
-
-        break;
+    for ev in events.read(){
+        count += ev.0;
     }
+
+    if count > 1 {
+        info!("Count is > 1 and found {}", drawn_cards_query.iter().len());
+        for (entity,mut transform, mut card, mut children) in &mut drawn_cards_query{
+            commands.entity(entity).insert(MovementCardDiscarded);
+
+
+            let diff_x = X_FINAL - transform.translation.x;
+            let diff_y = Y_FINAL - transform.translation.y;
+
+            transform.translation.x += diff_x;
+            transform.translation.y+= diff_y;
+
+            let mut rng = rand::thread_rng();
+
+            transform.rotate_z(rng.gen_range(-0.1..=0.1));
+        }
+    }
+
+    let mut counting = 0;
+
+    let mut spacing_count = 0;
+
+
+    for (entity,mut transform, mut card, mut children) in &mut playable_cards_query{
+
+        if count == 1{
+            transform.translation.x -= (DRAWN_CARDS_START - (DRAWN_CARDS_SPACE * 2.0));
+        }
+        else{
+            transform.translation.x -= (DRAWN_CARDS_START - (DRAWN_CARDS_SPACE * spacing_count as f32));
+        }
+
+        for child in children {
+            if let Ok(mut vis) = card_cover.get_mut(*child) {
+                *vis = Visibility::Hidden;
+            }
+        }
+
+        commands.entity(entity).insert(MovementCardDrawn);
+
+        counting += 1;
+        spacing_count += 1;
+
+        if counting == count{
+            break;
+        }
+    }
+}
+
+pub fn on_special_card_closed_event(
+    mut commands: Commands,
+    mut special_card_closed: EventReader<SpecialCardClosed>,
+    mut drawn_cards_query: Query<(Entity, &mut Transform , &mut MovementCard, &Children), 
+    (With<MovementCardDrawn>, Without<MovementCardDiscarded>)>,
+    mut movement_points_update: EventWriter<MovementPointsUpdateEvent>,
+    mut movement_cards_played: EventWriter<MovementCardsPlayedEvent>,
+)
+{
+    for (entity,mut transform, mut card, mut children) in &mut drawn_cards_query{
+        commands.entity(entity).insert(MovementCardDiscarded);
+
+
+        let diff_x = X_FINAL - transform.translation.x;
+        let diff_y = Y_FINAL - transform.translation.y;
+
+        transform.translation.x += diff_x;
+        transform.translation.y+= diff_y;
+
+        let mut rng = rand::thread_rng();
+
+        transform.rotate_z(rng.gen_range(-0.1..=0.1));
+
+        movement_points_update.send(MovementPointsUpdateEvent(card.value as i32));
+    }
+
+    movement_cards_played.send(MovementCardsPlayedEvent);
+
 }
 
 
@@ -146,7 +236,7 @@ pub fn setup_movement_cards(mut commands: Commands, asset_server: Res<AssetServe
                     .with_children(|parent: &mut ChildBuilder<'_, '_, '_>| {
                         parent.spawn(Text2dBundle {
                             text: Text::from_section(
-                                format!("+{}", &card.name),
+                                format!("{}", &card.name),
                                 TextStyle {
                                     font_size: 70.0,
                                     color: Color::rgb(1.0, 1.0, 0.2),
@@ -154,14 +244,14 @@ pub fn setup_movement_cards(mut commands: Commands, asset_server: Res<AssetServe
                                 },
                             ),
                             transform: Transform {
-                                translation: Vec3::new(0.0, 140.0, 1.0),
+                                translation: Vec3::new(0.0, 140.0, 0.0),
                                 ..default()
                             },
                             text_anchor: Anchor::TopCenter,
                             ..default()
                         });
 
-                        parent.spawn(Text2dBundle {
+                        parent.spawn((Text2dBundle {
                             text: Text::from_section(
                                 format!("+{}", &card.value),
                                 TextStyle {
@@ -171,12 +261,14 @@ pub fn setup_movement_cards(mut commands: Commands, asset_server: Res<AssetServe
                                 },
                             ),
                             transform: Transform {
-                                translation: Vec3::new(0.0, 0.0, 1.0),
+                                translation: Vec3::new(0.0, 0.0, 0.0),
                                 ..default()
                             },
                             text_anchor: Anchor::TopCenter,
                             ..default()
-                        });
+                        },
+                        CardPointsText,
+                    ));
 
                         parent.spawn((
                             SpriteBundle {
@@ -188,7 +280,7 @@ pub fn setup_movement_cards(mut commands: Commands, asset_server: Res<AssetServe
                                 transform: Transform::from_xyz(0.0, 0.0, 1.1),
                                 ..default()
                             },
-                            MovementCardCover,
+                            MovementCardCover(parent.parent_entity()),
                         ));
                     });
             }

@@ -1,5 +1,8 @@
-use crate::movement::{MovementCardsDrawnEvent, MovementPointsUpdateEvent};
-use crate::turns::TurnsUpdateEvent;
+use crate::movement::{
+    MovementCardsDrawnEvent, MovementCardsPlayedEvent, MovementPoints, MovementPointsUpdateEvent,
+};
+use crate::turns::{TurnsLeft, TurnsUpdateEvent};
+use crate::ui::{GameOverText, WonText};
 use bevy::text::{BreakLineOn, Text2dBounds, TextLayoutInfo};
 use bevy::{ecs::system::EntityCommands, prelude::*, sprite::Anchor};
 use bevy_mod_picking::prelude::*;
@@ -48,6 +51,12 @@ pub struct Player;
 
 #[derive(Component)]
 pub struct TileHighlight(pub Entity);
+
+#[derive(Component)]
+pub struct TileCostText;
+
+#[derive(Component)]
+pub struct TileDescriptionText;
 
 pub fn setup_tiles(
     mut commands: Commands,
@@ -125,49 +134,55 @@ pub fn setup_tiles(
                                 ..default()
                             };
 
-                            parent.spawn(Text2dBundle {
-                                text: Text::from_section(
-                                    format!("{}", &tile.cost),
-                                    TextStyle {
-                                        font_size: 70.0,
-                                        color: Color::rgb(1.0, 1.0, 0.2),
+                            parent.spawn((
+                                Text2dBundle {
+                                    text: Text::from_section(
+                                        format!("{}", &tile.cost),
+                                        TextStyle {
+                                            font_size: 70.0,
+                                            color: Color::rgb(1.0, 1.0, 0.2),
+                                            ..default()
+                                        },
+                                    ),
+                                    transform: Transform {
+                                        translation: Vec3::new(0.0, 140.0, 1.0),
                                         ..default()
                                     },
-                                ),
-                                transform: Transform {
-                                    translation: Vec3::new(0.0, 140.0, 1.0),
+                                    text_anchor: Anchor::TopCenter,
                                     ..default()
                                 },
-                                text_anchor: Anchor::TopCenter,
-                                ..default()
-                            });
+                                TileCostText,
+                            ));
 
                             let other_box_size = Vec2::new(190.0, 350.0);
 
-                            parent.spawn(Text2dBundle {
-                                text: Text {
-                                    sections: vec![TextSection::new(
-                                        format!("{}", &tile.description),
-                                        TextStyle {
-                                            font_size: 25.0,
-                                            color: Color::rgb(0.9, 0.9, 0.9),
-                                            ..default()
-                                        },
-                                    )],
-                                    linebreak_behavior: BreakLineOn::WordBoundary,
-                                    alignment: TextAlignment::Left,
-                                },
-                                text_2d_bounds: Text2dBounds {
-                                    // Wrap text in the rectangle
-                                    size: other_box_size,
-                                },
-                                transform: Transform {
-                                    translation: Vec3::new(0.0, 75.0, 1.0),
+                            parent.spawn((
+                                Text2dBundle {
+                                    text: Text {
+                                        sections: vec![TextSection::new(
+                                            format!("{}", &tile.description),
+                                            TextStyle {
+                                                font_size: 25.0,
+                                                color: Color::rgb(0.9, 0.9, 0.9),
+                                                ..default()
+                                            },
+                                        )],
+                                        linebreak_behavior: BreakLineOn::WordBoundary,
+                                        alignment: TextAlignment::Left,
+                                    },
+                                    text_2d_bounds: Text2dBounds {
+                                        // Wrap text in the rectangle
+                                        size: other_box_size,
+                                    },
+                                    transform: Transform {
+                                        translation: Vec3::new(0.0, 75.0, 1.0),
+                                        ..default()
+                                    },
+                                    text_anchor: Anchor::TopCenter,
                                     ..default()
                                 },
-                                text_anchor: Anchor::TopCenter,
-                                ..default()
-                            });
+                                TileDescriptionText,
+                            ));
 
                             parent.spawn((
                                 SpriteBundle {
@@ -188,7 +203,7 @@ pub fn setup_tiles(
                             parent
                                 .spawn((
                                     SpatialBundle {
-                                        transform: Transform::from_xyz(0.0,0.0, -1.1),
+                                        transform: Transform::from_xyz(0.0, 0.0, -1.1),
                                         visibility: Visibility::Hidden,
                                         ..Default::default()
                                     },
@@ -354,17 +369,31 @@ impl From<ListenerInput<Pointer<Down>>> for TileSelected {
 pub fn on_tile_selected(
     mut commands: Commands,
     mut events: EventReader<TileSelected>,
-    mut tiles: Query<(Entity, &mut Transform, &mut Tile)>,
+    mut tiles: Query<(Entity, &mut Transform, &mut Tile, &Children)>,
     mut blocker: Query<&mut Visibility, With<TileRevealBlocker>>,
     mut close_button: Query<(
         &mut Visibility,
         &TileRevealBlockerCloseButton,
         Without<TileRevealBlocker>,
     )>,
-    mut highlightables: Query<(&mut Visibility, &mut TileHighlight), 
-    (Without<TileRevealBlocker>, Without<TileRevealBlockerCloseButton>)>,
+    mut highlightables: Query<
+        (&mut Visibility, &mut TileHighlight),
+        (
+            Without<TileRevealBlocker>,
+            Without<TileRevealBlockerCloseButton>,
+        ),
+    >,
+    mut tile_cover_query: Query<
+        &mut Visibility,
+        (
+            With<TileCover>,
+            Without<TileHighlight>,
+            Without<TileRevealBlocker>,
+            Without<TileRevealBlockerCloseButton>,
+        ),
+    >,
 ) {
-    for (entity, mut transform, mut tile) in &mut tiles {
+    for (entity, mut transform, mut tile, mut children) in &mut tiles {
         if transform.scale.x > 1.0 {
             if transform.scale.x < FOCUS_SCALE + SELECTED_SCALE {
                 transform.scale.x += SELECTED_SCALE;
@@ -377,8 +406,14 @@ pub fn on_tile_selected(
                 let mut close_button = close_button.single_mut();
                 *close_button.0 = Visibility::Visible;
 
-                for(mut vis, mut highlight) in &mut highlightables{
-                    if highlight.0 == entity{
+                for (mut vis, mut highlight) in &mut highlightables {
+                    if highlight.0 == entity {
+                        *vis = Visibility::Hidden;
+                    }
+                }
+
+                for child in children {
+                    if let Ok(mut vis) = tile_cover_query.get_mut(*child) {
                         *vis = Visibility::Hidden;
                     }
                 }
@@ -503,52 +538,20 @@ pub fn tile_selected_close(
 
     match tile_clone.tile_type {
         TileType::Plain => {}
-        TileType::CurseMovementPoints => {
-            info!("Curse movement");
+        TileType::MovementPointsUpdate => {
             movement_points_update.send(MovementPointsUpdateEvent(tile_clone.value));
 
-            if tile_clone.duration != 0 {
+            if tile_clone.duration < 0 {
                 //create or add to movement curse comp
+            } else if tile_clone.duration > 0 {
             }
         }
-        TileType::MovementPointsAdd => {
-            movement_points_update.send(MovementPointsUpdateEvent(tile_clone.value));
-
-            if tile_clone.duration > 0 {}
-        }
-        TileType::TurnReduction => {
-            info!("Turn reduction");
+        TileType::TurnUpdate => {
             turns_update.send(TurnsUpdateEvent(tile_clone.value));
         }
-        // TileType::RouteRestriction => {
-        //     info!("Route restriction");
-        //     // create route restriction component
-        // },
-        TileType::MovementPointsSub => {
-            info!("Movement sub");
-            movement_points_update.send(MovementPointsUpdateEvent(tile_clone.value));
-
-            if tile_clone.duration > 0 {
-                //create or add to movement sub comp
-            }
-        }
         TileType::Blessing => {
-            info!("Blessing");
             //remove ailments components
         }
-        // TileType::StepBack => {
-        //     info!("Step back");
-        //     if visited_tiles.0.len() > 1{
-        //         let prev_tile = visited_tiles.0[visited_tiles.0.len() - 2];
-
-        //         for (_, mut tile) in &mut tiles {
-        //             if tile.number == prev_tile{
-        //                 //move PC to this tile
-        //                 break;
-        //             }
-        //         }
-        //     }
-        // },
     }
 
     tile_closed.send(TileClosedEvent);
@@ -558,10 +561,8 @@ pub fn tile_selected_close(
 pub enum TileType {
     #[default]
     Plain,
-    CurseMovementPoints,
-    MovementPointsAdd,
-    TurnReduction,
-    MovementPointsSub,
+    MovementPointsUpdate,
+    TurnUpdate,
     Blessing,
 }
 
@@ -613,37 +614,75 @@ pub fn on_turn_ended(
     mut commands: Commands,
     mut query: Query<(Entity, &mut Tile)>,
     mut highlightables: Query<(&mut Visibility, &mut TileHighlight)>,
-    mut events: EventReader<MovementCardsDrawnEvent>, //should listen to turn ended event
+    mut events: EventReader<MovementCardsPlayedEvent>,
+    mut movement_points: ResMut<MovementPoints>,
+    mut tile_closed: EventWriter<TileClosedEvent>,
+    mut turns_update: EventWriter<TurnsUpdateEvent>,
+    mut turns_left: ResMut<TurnsLeft>,
+    mut game_over: Query<&mut Visibility, (With<GameOverText>, Without<WonText>, Without<TileHighlight>)>,
+    mut game_won: Query<&mut Visibility, (With<WonText>, Without<GameOverText>, Without<TileHighlight>)>,
 ) {
-    let mut tile_number = 0;
+    turns_update.send(TurnsUpdateEvent(-1));
+
+    if turns_left.0 <= 0{
+        let mut vis = game_over.single_mut();
+
+        *vis = Visibility::Visible;
+        return;
+    }
+
+    let mut costs_met = false;
 
     for (entity, mut tile) in &mut query {
-        commands.entity(entity).remove::<Selectable>();
-
-        for(mut vis, mut highlight) in &mut highlightables{
-            if highlight.0 == entity{
-                *vis = Visibility::Hidden;
-            }
-        }
-
         if tile.current {
-            tile.current = false;
-            tile_number = tile.number;
+            costs_met = if tile.cost as i32 <= movement_points.0 {
+                true
+            } else {
+                false
+            };
+
+            if costs_met && tile.number == 10{
+                let mut vis = game_won.single_mut();
+
+                *vis = Visibility::Visible;
+            }
         }
     }
 
-    let mut neighbours = get_neighbours(tile_number);
+    if costs_met {
 
-    for (entity, mut tile) in &mut query {
-        if neighbours.contains(&tile.number) {
-            commands.entity(entity).insert(Selectable);
+        let mut tile_number = 0;
 
-            for(mut vis, mut highlight) in &mut highlightables{
-                if highlight.0 == entity{
-                    *vis = Visibility::Visible;
+        for (entity, mut tile) in &mut query {
+            commands.entity(entity).remove::<Selectable>();
+
+            for (mut vis, mut highlight) in &mut highlightables {
+                if highlight.0 == entity {
+                    *vis = Visibility::Hidden;
+                }
+            }
+
+            if tile.current {
+                tile.current = false;
+                tile_number = tile.number;
+            }
+        }
+
+        let mut neighbours = get_neighbours(tile_number);
+
+        for (entity, mut tile) in &mut query {
+            if neighbours.contains(&tile.number) {
+                commands.entity(entity).insert(Selectable);
+
+                for (mut vis, mut highlight) in &mut highlightables {
+                    if highlight.0 == entity {
+                        *vis = Visibility::Visible;
+                    }
                 }
             }
         }
+    } else {
+        tile_closed.send(TileClosedEvent);
     }
 }
 
@@ -656,7 +695,7 @@ pub fn generate_tiles() -> Vec<Tile> {
             "You find ruins with a shiny object. \"Stop!\" You touch it and get cursed. Lose 2 movement points each turn.",
         ),
         number: 0,
-        tile_type: TileType::CurseMovementPoints,
+        tile_type: TileType::MovementPointsUpdate,
         value: -2,
         duration: -1,
         current: false,
@@ -668,7 +707,7 @@ pub fn generate_tiles() -> Vec<Tile> {
             "Tree with strange fruit. You bite it, \"yum.\" Gain 1 movement point.",
         ),
         number: 0,
-        tile_type: TileType::MovementPointsAdd,
+        tile_type: TileType::MovementPointsUpdate,
         value: 1,
         duration: 0,
         current: false,
@@ -678,7 +717,7 @@ pub fn generate_tiles() -> Vec<Tile> {
         cost: 1,
         description: String::from("Lion fight. You survive. Lose 2 movement points."),
         number: 0,
-        tile_type: TileType::MovementPointsSub,
+        tile_type: TileType::MovementPointsUpdate,
         value: -2,
         duration: 0,
         current: false,
@@ -688,7 +727,7 @@ pub fn generate_tiles() -> Vec<Tile> {
         cost: 2,
         description: String::from("River! You have to swim across, lose 1 turn."),
         number: 0,
-        tile_type: TileType::TurnReduction,
+        tile_type: TileType::TurnUpdate,
         value: -1,
         duration: 0,
         current: false,
@@ -733,7 +772,7 @@ pub fn generate_tiles() -> Vec<Tile> {
             "Snake bite. You are poisoned. Lose 1 movement point for 2 turns.",
         ),
         number: 0,
-        tile_type: TileType::MovementPointsSub,
+        tile_type: TileType::MovementPointsUpdate,
         value: -1,
         duration: 2,
         current: false,
@@ -745,7 +784,7 @@ pub fn generate_tiles() -> Vec<Tile> {
             "Tree with strange fruit. You bite it, \"yum.\" Gain 1 movement point.",
         ),
         number: 0,
-        tile_type: TileType::MovementPointsAdd,
+        tile_type: TileType::MovementPointsUpdate,
         value: 1,
         duration: 0,
         current: false,
@@ -755,7 +794,7 @@ pub fn generate_tiles() -> Vec<Tile> {
         cost: 4,
         description: String::from("River! You have to swim across, lose 1 turn."),
         number: 0,
-        tile_type: TileType::TurnReduction,
+        tile_type: TileType::TurnUpdate,
         value: -1,
         duration: 0,
         current: false,
@@ -767,7 +806,7 @@ pub fn generate_tiles() -> Vec<Tile> {
             "You find ruins with a shiny object. \"Stop!\" You touch it and get cursed. Lose 2 movement points each turn.",
         ),
         number: 0,
-        tile_type: TileType::CurseMovementPoints,
+        tile_type: TileType::MovementPointsUpdate,
         value: -2,
         duration: -1,
         current: false,
@@ -791,7 +830,7 @@ pub fn generate_tiles() -> Vec<Tile> {
             "You find ruins with a shiny object. \"Stop!\" You touch it and get cursed. Lose 2 movement points each turn.",
         ),
         number: 0,
-        tile_type: TileType::CurseMovementPoints,
+        tile_type: TileType::MovementPointsUpdate,
         value: -2,
         duration: -1,
         current: false,
@@ -803,7 +842,7 @@ pub fn generate_tiles() -> Vec<Tile> {
             "Tree with strange fruit. You bite it, \"yum.\" Gain 1 movement point.",
         ),
         number: 0,
-        tile_type: TileType::MovementPointsAdd,
+        tile_type: TileType::MovementPointsUpdate,
         value: 1,
         duration: 0,
         current: false,
@@ -815,7 +854,7 @@ pub fn generate_tiles() -> Vec<Tile> {
             "You befriend an elephant. You ride on its back. Gain 2 movement points.",
         ),
         number: 0,
-        tile_type: TileType::MovementPointsAdd,
+        tile_type: TileType::MovementPointsUpdate,
         value: 2,
         duration: 0,
         current: false,
@@ -825,7 +864,7 @@ pub fn generate_tiles() -> Vec<Tile> {
         cost: 6,
         description: String::from("Lion fight. You survive. Lose 2 movement points."),
         number: 0,
-        tile_type: TileType::MovementPointsSub,
+        tile_type: TileType::MovementPointsUpdate,
         value: -2,
         duration: 0,
         current: false,
@@ -856,7 +895,7 @@ pub fn generate_tiles() -> Vec<Tile> {
         cost: 7,
         description: String::from("River! You have to swim across, lose 1 turn."),
         number: 0,
-        tile_type: TileType::TurnReduction,
+        tile_type: TileType::TurnUpdate,
         value: -1,
         duration: 0,
         current: false,
@@ -878,7 +917,7 @@ pub fn generate_tiles() -> Vec<Tile> {
         cost: 7,
         description: String::from("Lion fight. You survive. Lose 2 movement points."),
         number: 0,
-        tile_type: TileType::MovementPointsSub,
+        tile_type: TileType::MovementPointsUpdate,
         value: -2,
         duration: 0,
         current: false,
@@ -890,7 +929,7 @@ pub fn generate_tiles() -> Vec<Tile> {
             "You befriend an elephant. You ride on its back. Gain 2 movement points.",
         ),
         number: 0,
-        tile_type: TileType::MovementPointsAdd,
+        tile_type: TileType::MovementPointsUpdate,
         value: 2,
         duration: 0,
         current: false,
@@ -913,7 +952,7 @@ pub fn generate_tiles() -> Vec<Tile> {
             "Snake bite. You are poisoned. Lose 1 movement point for 2 turns.",
         ),
         number: 0,
-        tile_type: TileType::MovementPointsSub,
+        tile_type: TileType::MovementPointsUpdate,
         value: -1,
         duration: 2,
         current: false,
@@ -925,7 +964,7 @@ pub fn generate_tiles() -> Vec<Tile> {
             "Snake bite. You are poisoned. Lose 1 movement point for 2 turns.",
         ),
         number: 0,
-        tile_type: TileType::MovementPointsSub,
+        tile_type: TileType::MovementPointsUpdate,
         value: -1,
         duration: 2,
         current: false,
@@ -937,7 +976,7 @@ pub fn generate_tiles() -> Vec<Tile> {
             "You befriend an elephant. You ride on its back. Gain 2 movement points.",
         ),
         number: 0,
-        tile_type: TileType::MovementPointsAdd,
+        tile_type: TileType::MovementPointsUpdate,
         value: 2,
         duration: 0,
         current: false,

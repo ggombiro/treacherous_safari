@@ -6,7 +6,15 @@ use bevy::{
 use bevy_mod_picking::prelude::*;
 use rand::Rng;
 
-use crate::{movement::MovementCardsDrawnEvent, tiles::TileClosedEvent, ui::MovementPointsText};
+use crate::{
+    movement::{
+        CardPointsText, DrawCardEvent, MovementCard, MovementCardDiscarded, MovementCardDrawn,
+        MovementCardsDrawnEvent, MovementPointsUpdateEvent,
+    },
+    tiles::{Tile, TileClosedEvent, TileCostText, TileDescriptionText, TileType},
+    turns::TurnsUpdateEvent,
+    ui::MovementPointsText,
+};
 
 const CARDS_TO_DRAW: u32 = 8;
 const FOCUS_SCALE: f32 = 0.1;
@@ -30,25 +38,19 @@ pub struct SpecialCardRevealBlocker;
 pub struct SpecialCardRevealBlockerCloseButton;
 
 #[derive(Event)]
-pub struct MovementPointsUpdateEvent(pub i32);
-
-#[derive(Event)]
-pub struct DrawCardEvent;
-
-#[derive(Event)]
 pub struct SpecialCardPlayedEvent;
 
 #[derive(Component)]
 pub struct SpecialCardCover;
 
 #[derive(Component)]
-pub struct MovementCardDrawn;
-
-#[derive(Component)]
 pub struct SpecialCardDiscarded;
 
 #[derive(Component)]
 pub struct SpecialCardSelectable;
+
+#[derive(Event)]
+pub struct SpecialCardClosed;
 
 #[derive(Component)]
 pub struct SpecialCardHighlight(pub Entity);
@@ -61,32 +63,6 @@ pub struct SpecialCard {
     pub value: i32,
     pub card_type: CardType,
 }
-
-// pub fn on_special_card_closed_event(
-//     mut commands: Commands,
-//     mut events: EventReader<TileClosedEvent>,
-//     mut playable_cards_query: Query<(Entity, &mut Transform , &mut MovementCard),
-//     (Without<MovementCardDrawn>, Without<MovementCardDiscarded>)>,
-//     mut cards_drawn: EventWriter<MovementCardsDrawnEvent>,
-// ) {
-//     let mut count = 0;
-
-//     for (entity, mut transform, mut card) in &mut playable_cards_query{
-//         if count == CARDS_TO_DRAW{
-//             break;
-//         }
-
-//         transform.translation.x -= (DRAWN_CARDS_START - (DRAWN_CARDS_SPACE * count as f32));
-
-//         let mut child = commands.spawn(MovementCardDrawn).id();
-
-//         commands.entity(entity).add_child(child);
-
-//         count += 1;
-//     }
-
-//     cards_drawn.send(MovementCardsDrawnEvent);
-// }
 
 pub fn setup_special_cards(mut commands: Commands, asset_server: Res<AssetServer>) {
     let len = 300.0;
@@ -115,6 +91,10 @@ pub fn setup_special_cards(mut commands: Commands, asset_server: Res<AssetServer
 
             for x in 0..4 {
                 for y in 0..2 {
+                    if card_res.len() == 0 {
+                        continue;
+                    }
+
                     let mut rng = rand::thread_rng();
 
                     card_res_index = rng.gen_range(0..card_res.len());
@@ -327,7 +307,7 @@ impl From<ListenerInput<Pointer<Down>>> for SpecialCardSelected {
 pub fn on_special_card_selected(
     mut commands: Commands,
     mut events: EventReader<SpecialCardSelected>,
-    mut cards: Query<(Entity, &mut Transform, &mut SpecialCard, &Children)>,
+    mut cards: Query<(Entity, &mut Transform, &mut SpecialCard, &Children), Without<SpecialCardDiscarded>>,
     mut card_cover_query: Query<
         &mut Visibility,
         (
@@ -463,19 +443,48 @@ impl From<ListenerInput<Pointer<Click>>> for SpecialCardSelectedBlockerClose {
 pub fn selected_special_card_close(
     mut commands: Commands,
     mut events: EventReader<SpecialCardSelectedBlockerClose>,
-    mut cards: Query<(Entity, &mut Transform, &mut SpecialCard)>,
+    mut cards: Query<(Entity, &mut Transform, &mut SpecialCard), Without<MovementCard>>,
     mut blocker: Query<&mut Visibility, With<SpecialCardRevealBlocker>>,
     mut close_button: Query<(
         &mut Visibility,
         &SpecialCardRevealBlockerCloseButton,
         Without<SpecialCardRevealBlocker>,
     )>,
-    mut special_card_closed: EventWriter<TileClosedEvent>,
+    mut special_card_closed: EventWriter<SpecialCardClosed>,
     mut highlightables: Query<
         (&mut Visibility, &mut SpecialCardHighlight),
         (
             Without<SpecialCardRevealBlocker>,
             Without<SpecialCardRevealBlockerCloseButton>,
+        ),
+    >,
+    mut draw_card_event: EventWriter<DrawCardEvent>,
+    mut movement_points_update: EventWriter<MovementPointsUpdateEvent>,
+    mut turns_update: EventWriter<TurnsUpdateEvent>,
+    mut tiles: Query<
+        (Entity, &mut Transform, &mut Tile, &Children),
+        (
+            Without<SpecialCard>,
+            Without<MovementCard>,
+            Without<MovementCardDrawn>,
+        ),
+    >,
+    mut tile_cost_texts: Query<&mut Text, With<TileCostText>>,
+    mut tile_desc_texts: Query<
+        &mut Text,
+        (
+            With<TileDescriptionText>,
+            Without<TileCostText>,
+            Without<CardPointsText>,
+        ),
+    >,
+    mut card_points_texts: Query<&mut Text, (With<CardPointsText>, Without<TileCostText>)>,
+    mut drawn_cards_query: Query<
+        (Entity, &mut Transform, &mut MovementCard, &Children),
+        (
+            With<MovementCardDrawn>,
+            Without<MovementCardDiscarded>,
+            Without<Tile>,
         ),
     >,
 ) {
@@ -505,16 +514,17 @@ pub fn selected_special_card_close(
 
             commands.entity(entity).insert(SpecialCardDiscarded);
 
-
             let diff_x = X_FINAL - transform.translation.x;
             let diff_y = Y_FINAL - transform.translation.y;
 
             transform.translation.x += diff_x;
-            transform.translation.y+= diff_y;
+            transform.translation.y += diff_y;
 
             let mut rng = rand::thread_rng();
 
             transform.rotate_z(rng.gen_range(-0.1..=0.1));
+
+            card_clone = card.clone();
         }
     }
 
@@ -522,51 +532,127 @@ pub fn selected_special_card_close(
 
     match card_clone.card_type {
         CardType::DrawMovementCard => {
-            if card_clone.value == 2{
-                //discard hand and then draw 2
-            }
-            else if card_clone.value == 1{
-                //draw 1 card
-            }
-        },
-        CardType::MovementPointsAddCard => todo!(),
-        CardType::MovementPointsAdd => todo!(),
-        CardType::TurnSub => todo!(),
-        CardType::TurnAdd => todo!(),
-        CardType::MovementPointsSubCard => todo!(),
-        CardType::MovementPointsSub => todo!(),
-        CardType::MovementPointsSubCardHighest => todo!(),
-        CardType::CurrentTileCostDirectChange => todo!(),
-        CardType::CurrentTileCostIndirectChange => todo!(),
-        CardType::MovementPointsMultiplyLeastCard => todo!(),
-        CardType::MovementPointsReductionAllCards => todo!(),
-        CardType::Erase => todo!(),
+            draw_card_event.send(DrawCardEvent(card_clone.value as u32));
+        }
+        CardType::MovementPointsUpdate => {
+            movement_points_update.send(MovementPointsUpdateEvent(card_clone.value));
+        }
+        CardType::TurnUpdate => {
+            turns_update.send(TurnsUpdateEvent(card_clone.value));
+        }
+        CardType::MovementPointsSubHighest => {
+            let mut m_card = drawn_cards_query
+                .iter()
+                .map(|mut m| (m.0, m.2.value))
+                .max_by_key(|&m| m.1)
+                .unwrap();
 
-    // TileType::Plain => {}
-    // TileType::CurseMovementPoints => {
-    //     info!("Curse movement");
-    //     movement_points_update.send(MovementPointsUpdateEvent(card_clone.value));
+            for (entity, _, mut movement_card, mut children) in &mut drawn_cards_query {
+                if entity == m_card.0 {
+                    movement_card.value -= card_clone.value as u32;
+                }
 
-    //     if card_clone.duration != 0 {
-    //         //create or add to movement curse comp
-    //     }
-    // }
+                for child in children {
+                    if let Ok(mut text) = card_points_texts.get_mut(*child) {
+                        text.sections[0].value = format!("+{}", movement_card.value);
+                    }
+                }
+            }
+        }
+        CardType::CurrentTileCostDirectChange => {
+            for (_, _, mut tile, mut children) in &mut tiles {
+                if tile.current {
+                    tile.cost = card_clone.value as u32;
+
+                    for child in children {
+                        if let Ok(mut text) = tile_cost_texts.get_mut(*child) {
+                            text.sections[0].value = format!("{}", tile.cost);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        CardType::CurrentTileCostIndirectChange => {
+            for (_, _, mut tile, mut children) in &mut tiles {
+                if tile.current {
+                    tile.cost += card_clone.value as u32;
+
+                    for child in children {
+                        if let Ok(mut text) = tile_cost_texts.get_mut(*child) {
+                            text.sections[0].value = format!("{}", tile.cost);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        CardType::MovementPointsMultiplyLeastCard => {
+            let mut m_card = drawn_cards_query
+                .iter()
+                .map(|mut m| (m.0, m.2.value))
+                .min_by_key(|&m| m.1)
+                .unwrap();
+
+            for (entity, _, mut movement_card, mut children) in &mut drawn_cards_query {
+                if entity == m_card.0 {
+                    movement_card.value *= card_clone.value as u32;
+                }
+
+                for child in children {
+                    if let Ok(mut text) = card_points_texts.get_mut(*child) {
+                        text.sections[0].value = format!("+{}", movement_card.value);
+                    }
+                }
+            }
+        }
+        CardType::MovementPointsReductionAllCards => {
+            for (_, _, mut movement_card, mut children) in &mut drawn_cards_query {
+                movement_card.value = card_clone.value as u32;
+
+                for child in children {
+                    if let Ok(mut text) = card_points_texts.get_mut(*child) {
+                        text.sections[0].value = format!("+{}", movement_card.value);
+                    }
+                }
+            }
+        }
+        CardType::Erase => {
+            for (_, _, mut tile, mut children) in &mut tiles {
+                if tile.current {
+                    tile.cost += card_clone.value as u32;
+                    tile.tile_type = TileType::Plain;
+
+                    for child in children {
+                        if let Ok(mut text) = tile_cost_texts.get_mut(*child) {
+                            text.sections[0].value = format!("{}", tile.cost);
+                        }
+                    }
+
+                    for child in children {
+                        if let Ok(mut text) = tile_desc_texts.get_mut(*child) {
+                            text.sections[0].value = format!("Erased!");
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        _ => {
+            info!("Else")
+        }
     }
 
-    // special_card_closed.send(TileClosedEvent);
+    special_card_closed.send(SpecialCardClosed);
 }
 
 #[derive(Debug, Clone, Default)]
 pub enum CardType {
     #[default]
     DrawMovementCard,
-    MovementPointsAddCard,
-    MovementPointsAdd,
-    TurnSub,
-    TurnAdd,
-    MovementPointsSubCard,
-    MovementPointsSub,
-    MovementPointsSubCardHighest,
+    MovementPointsUpdate,
+    TurnUpdate,
+    MovementPointsSubHighest,
     CurrentTileCostDirectChange,
     CurrentTileCostIndirectChange,
     MovementPointsMultiplyLeastCard,
@@ -582,14 +668,14 @@ pub fn generate_cards() -> Vec<SpecialCard> {
         tag: String::from("<Naughty>"),
         description: String::from("Take off 2 movement points from movement card with the highest movement points in your hand"),
         value: 2,
-        card_type: CardType::MovementPointsSubCardHighest,
+        card_type: CardType::MovementPointsSubHighest,
     };
 
     let mut card_2 = SpecialCard {
         name: String::from("Motivity"),
         tag: String::from("<Nice>"),
         description: String::from(
-            "Double the movement points of the card in your hand with the least movement points",
+            "Double the movement points of the card with the least points in your hand",
         ),
         value: 2,
         card_type: CardType::MovementPointsMultiplyLeastCard,
@@ -607,16 +693,16 @@ pub fn generate_cards() -> Vec<SpecialCard> {
         name: String::from("Aw Snap!"),
         tag: String::from("<Naughty>"),
         description: String::from("Lose 1 movement point"),
-        value: 1,
-        card_type: CardType::MovementPointsSub,
+        value: -1,
+        card_type: CardType::MovementPointsUpdate,
     };
 
     let mut card_5 = SpecialCard {
         name: String::from("Overdraw"),
         tag: String::from("<Naughty>"),
         description: String::from("Lose 2 movement points"),
-        value: 2,
-        card_type: CardType::MovementPointsSub,
+        value: -2,
+        card_type: CardType::MovementPointsUpdate,
     };
 
     let mut card_6 = SpecialCard {
@@ -624,7 +710,7 @@ pub fn generate_cards() -> Vec<SpecialCard> {
         tag: String::from("<Nice>"),
         description: String::from("Add 2 movement points"),
         value: 2,
-        card_type: CardType::MovementPointsAdd,
+        card_type: CardType::MovementPointsUpdate,
     };
 
     let mut card_7 = SpecialCard {
@@ -672,7 +758,7 @@ pub fn generate_cards() -> Vec<SpecialCard> {
         tag: String::from("<Nice>"),
         description: String::from("Add a turn"),
         value: 1,
-        card_type: CardType::TurnAdd,
+        card_type: CardType::TurnUpdate,
     };
 
     let mut card_13 = SpecialCard {
