@@ -2,14 +2,11 @@ use bevy::{prelude::*, sprite::MaterialMesh2dBundle, sprite::Anchor, ecs::system
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_mod_picking::prelude::*;
 use bevy::{app::AppExit, log::LogPlugin};
-use bevy_eventlistener::prelude::*;
-use bevy_mod_picking::prelude::*;
-use bevy_utils::tracing::Level;
 use tiles::{setup_tiles, on_tile_selected, tile_selected_close, on_tile_setup_complete,
     TileSelected, TileSelectedBlockerClose, TileSetupComplete, VisitedTiles};
 use movement::{MovementPoints, update_movement_points, create_movement_points, MovementPointsUpdateEvent};
 use game_state::{GameState, GameStates};
-use turns::TurnsLeft;
+use turns::{TurnsLeft, TurnsUpdateEvent, update_turns_left};
 use ui::setup_game_ui;
 
 
@@ -35,7 +32,7 @@ fn main() {
             WorldInspectorPlugin::default().run_if(input_toggle_active(false, KeyCode::Escape)),
         )
         .insert_resource(GameState(GameStates::TileReveal))
-        .insert_resource(TurnsLeft(7))
+        .insert_resource(TurnsLeft(0))
         .insert_resource(MovementPoints(0))
         .insert_resource(VisitedTiles(vec![0]))
         .add_systems(Startup, (
@@ -46,11 +43,13 @@ fn main() {
         .add_event::<TileSelected>()
         .add_event::<TileSelectedBlockerClose>()
         .add_event::<TileSetupComplete>()
+        .add_event::<TurnsUpdateEvent>()
         .add_systems(
             Update,
             (
                 create_movement_points,
                 update_movement_points.run_if(on_event::<MovementPointsUpdateEvent>()),
+                update_turns_left.run_if(on_event::<TurnsUpdateEvent>()),
                 on_tile_selected.run_if(on_event::<TileSelected>()),
                 tile_selected_close.run_if(on_event::<TileSelectedBlockerClose>()),
                 on_tile_setup_complete.run_if(on_event::<TileSetupComplete>()),
@@ -65,7 +64,7 @@ pub fn setup(
 ) {
     commands.spawn(Camera2dBundle::default());
 
-    // logging_next_state.set(debug::DebugPickingMode::Disabled);
+    logging_next_state.set(debug::DebugPickingMode::Disabled);
 }
 
 
@@ -85,40 +84,6 @@ pub fn setup(
 //     }
 // }
 
-
-
-
-
-// See bevy_eventlistener. In particular, look at the event_listeners.rs example.
-// #[derive(Clone, Event)]
-// struct CycleLogging(Entity);
-
-// impl From<ListenerInput<Pointer<Click>>> for CycleLogging {
-//     fn from(event: ListenerInput<Pointer<Click>>) -> Self {
-//         CycleLogging(event.target) // you could use this to choose between different buttons
-//     }
-// }
-
-// // change log verbosity by cycling through the DebugPickingMode state
-// fn cycle_logging(
-//     logging_state: Res<State<debug::DebugPickingMode>>,
-//     mut logging_next_state: ResMut<NextState<debug::DebugPickingMode>>,
-// ) {
-//     match logging_state.get() {
-//         debug::DebugPickingMode::Normal => {
-//             info!("Changing state from Normal to Noisy.");
-//             logging_next_state.set(debug::DebugPickingMode::Noisy);
-//         }
-//         debug::DebugPickingMode::Noisy => {
-//             info!("Changing state from Noisy to Disabled.");
-//             logging_next_state.set(debug::DebugPickingMode::Disabled);
-//         }
-//         debug::DebugPickingMode::Disabled => {
-//             info!("Changing state from Disabled to Normal.");
-//             logging_next_state.set(debug::DebugPickingMode::Normal);
-//         }
-//     }
-// }
 
 // basically same as above, but does something different.
 // #[derive(Clone, Event)]

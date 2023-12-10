@@ -1,33 +1,29 @@
 use bevy::prelude::*;
 use rand::Rng;
 
+use crate::ui::MovementPointsText;
+
 #[derive(Resource)]
 pub struct MovementPoints(pub i32);
 
-
-#[derive(Component)]
-pub struct MovementPointsUpdate {
-    value: i32,
-}
-
 #[derive(Event)]
-pub struct MovementPointsUpdateEvent(Entity, i32);
-
+pub struct MovementPointsUpdateEvent(pub i32);
 
 
 pub fn update_movement_points(
     mut commands: Commands,
     mut movement_points: ResMut<MovementPoints>,
     mut movement_points_update: EventReader<MovementPointsUpdateEvent>,
+    mut texts: Query<&mut Text, With<MovementPointsText>>, 
 ) {
 
+    let mut text = texts.single_mut();
+
     for ev in movement_points_update.read() {
-        eprintln!("Entity {:?} leveled up!", ev.0);
-        movement_points.0 += ev.1;
-        commands.entity(ev.0).despawn();
+        movement_points.0 += ev.0;
     }
 
-    info!("Movement points updated: {:?}", movement_points.0);
+    text.sections[0].value = format!("Points: {:?}", movement_points.0);
 }
 
 
@@ -40,11 +36,7 @@ pub fn create_movement_points(
         let mut rng = rand::thread_rng();
         let value = rng.gen_range(-2..=5);
 
-        let entity = commands.spawn(MovementPointsUpdate {
-            value,
-        });
-
-        movement_points_update.send(MovementPointsUpdateEvent(entity.id(), value));
+        movement_points_update.send(MovementPointsUpdateEvent(value));
     }
 }
 

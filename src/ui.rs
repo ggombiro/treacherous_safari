@@ -1,5 +1,11 @@
 use bevy::prelude::*;
 
+#[derive(Component)]
+pub struct MovementPointsText;
+
+#[derive(Component)]
+pub struct TurnsLeftText;
+
 pub fn setup_game_ui(mut commands: Commands) {
     commands
         .spawn((NodeBundle {
@@ -28,7 +34,9 @@ pub fn setup_game_ui(mut commands: Commands) {
                     },
                 ),
                 ..default()
-            },));
+            },
+            MovementPointsText
+        ));
         });
 
     commands
@@ -57,6 +65,8 @@ pub fn setup_game_ui(mut commands: Commands) {
                     },
                 ),
                 ..default()
-            },));
+            },
+            TurnsLeftText
+        ));
         });
 }

@@ -4,7 +4,7 @@ use crate::game_state::{GameState, GameStates};
 use crate::movement::{
     create_movement_points, update_movement_points, MovementPoints, MovementPointsUpdateEvent,
 };
-use crate::turns::TurnsLeft;
+use crate::turns::{TurnsLeft, TurnsUpdateEvent};
 use bevy::text::{BreakLineOn, Text2dBounds, TextLayoutInfo};
 use bevy::{ecs::system::EntityCommands, prelude::*, sprite::Anchor, sprite::MaterialMesh2dBundle};
 use bevy_mod_picking::prelude::*;
@@ -13,6 +13,8 @@ use rand::Rng;
 const FOCUS_SCALE: f32 = 0.1;
 const SELECTED_SCALE: f32 = 2.0;
 const BLOCKER_COLOR_VALUE: f32 = 0.1;
+const MOVEMENT_POINTS_INIT_VALUE: i32 = 0;
+const TURNS_INIT_VALUE: i32 = 7;
 
 #[derive(Component, Debug, Clone, Default)]
 pub struct Tile {
@@ -399,8 +401,8 @@ pub fn tile_selected_close(
     )>,
     mut player_query: Query<(&mut Transform, &Player), Without<Tile>>,
     mut visited_tiles: ResMut<VisitedTiles>,
-    mut movement_points: ResMut<MovementPoints>,
-    mut turns_left: ResMut<TurnsLeft>,
+    mut movement_points_update: EventWriter<MovementPointsUpdateEvent>,
+    mut turns_update: EventWriter<TurnsUpdateEvent>,
 ) {
 
 
@@ -438,7 +440,7 @@ pub fn tile_selected_close(
         TileType::Plain => {},
         TileType::CurseMovementPoints => {
             info!("Curse movement");
-            movement_points.0 -= tile_clone.value;
+            movement_points_update.send(MovementPointsUpdateEvent(tile_clone.value));
 
             if tile_clone.duration != 0{
                 //create or add to movement curse comp
@@ -446,7 +448,7 @@ pub fn tile_selected_close(
         },
         TileType::MovementPointsAdd => {
             
-            movement_points.0 += tile_clone.value;
+            movement_points_update.send(MovementPointsUpdateEvent(tile_clone.value));
 
             if tile_clone.duration > 0{
 
@@ -454,7 +456,7 @@ pub fn tile_selected_close(
         },
         TileType::TurnReduction => {
             info!("Turn reduction");
-            turns_left.0 -= tile_clone.value;
+            turns_update.send(TurnsUpdateEvent(tile_clone.value));
         },
         TileType::RouteRestriction => {
             info!("Route restriction");
@@ -462,7 +464,7 @@ pub fn tile_selected_close(
         },
         TileType::MovementPointsSub => {
             info!("Movement sub");
-            movement_points.0 -= tile_clone.value;
+            movement_points_update.send(MovementPointsUpdateEvent(tile_clone.value));
 
             if tile_clone.duration > 0{
                 //create or add to movement sub comp
@@ -522,7 +524,12 @@ pub fn on_tile_setup_complete(
     mut tiles: Query<(Entity, &mut Transform, &mut Tile, &Children)>,
     mut tile_selected: EventWriter<TileSelected>,
     mut tile_cover_query: Query<&mut Visibility, With<TileCover>>,
+    mut movement_points_update: EventWriter<MovementPointsUpdateEvent>,
+    mut turns_update: EventWriter<TurnsUpdateEvent>,
 ) {
+    movement_points_update.send(MovementPointsUpdateEvent(MOVEMENT_POINTS_INIT_VALUE));
+    turns_update.send(TurnsUpdateEvent(TURNS_INIT_VALUE));
+
     for (entity, mut transform, mut tile, mut children) in &mut tiles {
         info!("Tile: {:?}", tile);
         if tile.current {
@@ -566,17 +573,17 @@ pub fn generate_tiles() -> Vec<Tile> {
         neighbours: vec![-1],
         tile_type: TileType::MovementPointsAdd,
         value: 1,
-        duration: 1,
+        duration: 0,
         current: false,
     };
 
     let mut tile_1_2 = Tile {
         cost: 1,
-        description: String::from("Lion fight. You survive. Go back one tile."),
+        description: String::from("Lion fight. You survive. Lose 2 movement points."),
         number: 0,
         neighbours: vec![-1],
-        tile_type: TileType::StepBack,
-        value: 1,
+        tile_type: TileType::MovementPointsSub,
+        value: -2,
         duration: 0,
         current: false,
     };
@@ -588,7 +595,7 @@ pub fn generate_tiles() -> Vec<Tile> {
         neighbours: vec![-1],
         tile_type: TileType::TurnReduction,
         value: -1,
-        duration: 1,
+        duration: 0,
         current: false,
     };
 
@@ -616,16 +623,16 @@ pub fn generate_tiles() -> Vec<Tile> {
         current: false,
     };
 
-    let mut tile_3_0 = Tile {
-        cost: 3,
-        description: String::from("Native guides you. Go up or down 1 tile."),
-        number: 0,
-        neighbours: vec![-1],
-        tile_type: TileType::RouteRestriction,
-        value: 0,
-        duration: 0,
-        current: false,
-    };
+    // let mut tile_3_0 = Tile {
+    //     cost: 3,
+    //     description: String::from("Native guides you. Go up or down 1 tile."),
+    //     number: 0,
+    //     neighbours: vec![-1],
+    //     tile_type: TileType::RouteRestriction,
+    //     value: 0,
+    //     duration: 0,
+    //     current: false,
+    // };
 
     let mut tile_3_1 = Tile {
         cost: 3,
@@ -660,7 +667,7 @@ pub fn generate_tiles() -> Vec<Tile> {
         neighbours: vec![-1],
         tile_type: TileType::TurnReduction,
         value: -1,
-        duration: 1,
+        duration: 0,
         current: false,
     };
 
@@ -731,11 +738,11 @@ pub fn generate_tiles() -> Vec<Tile> {
 
     let mut tile_6_0 = Tile {
         cost: 6,
-        description: String::from("Lion fight. You survive. Go back one tile."),
+        description: String::from("Lion fight. You survive. Lose 2 movement points."),
         number: 0,
         neighbours: vec![-1],
-        tile_type: TileType::StepBack,
-        value: 1,
+        tile_type: TileType::MovementPointsSub,
+        value: -2,
         duration: 0,
         current: false,
     };
@@ -751,16 +758,16 @@ pub fn generate_tiles() -> Vec<Tile> {
         current: false,
     };
 
-    let mut tile_6_2 = Tile {
-        cost: 6,
-        description: String::from("Native guides you. Go forward 1 tile."),
-        number: 0,
-        neighbours: vec![-1],
-        tile_type: TileType::RouteRestriction,
-        value: 0,
-        duration: 0,
-        current: false,
-    };
+    // let mut tile_6_2 = Tile {
+    //     cost: 6,
+    //     description: String::from("Native guides you. Go forward 1 tile."),
+    //     number: 0,
+    //     neighbours: vec![-1],
+    //     tile_type: TileType::RouteRestriction,
+    //     value: 0,
+    //     duration: 0,
+    //     current: false,
+    // };
 
     let mut tile_7_0 = Tile {
         cost: 7,
@@ -769,7 +776,7 @@ pub fn generate_tiles() -> Vec<Tile> {
         neighbours: vec![-1],
         tile_type: TileType::TurnReduction,
         value: -1,
-        duration: 1,
+        duration: 0,
         current: false,
     };
 
@@ -788,11 +795,11 @@ pub fn generate_tiles() -> Vec<Tile> {
 
     let mut tile_7_2 = Tile {
         cost: 7,
-        description: String::from("Lion fight. You survive. Go back one tile."),
+        description: String::from("Lion fight. You survive. Lose 2 movement points."),
         number: 0,
         neighbours: vec![-1],
-        tile_type: TileType::StepBack,
-        value: 1,
+        tile_type: TileType::MovementPointsSub,
+        value: -2,
         duration: 0,
         current: false,
     };
@@ -810,16 +817,16 @@ pub fn generate_tiles() -> Vec<Tile> {
         current: false,
     };
 
-    let mut tile_8_1 = Tile {
-        cost: 8,
-        description: String::from("Native guides you. Go up or down 1 tile."),
-        number: 0,
-        neighbours: vec![-1],
-        tile_type: TileType::RouteRestriction,
-        value: 0,
-        duration: 0,
-        current: false,
-    };
+    // let mut tile_8_1 = Tile {
+    //     cost: 8,
+    //     description: String::from("Native guides you. Go up or down 1 tile."),
+    //     number: 0,
+    //     neighbours: vec![-1],
+    //     tile_type: TileType::RouteRestriction,
+    //     value: 0,
+    //     duration: 0,
+    //     current: false,
+    // };
 
     let mut tile_8_2 = Tile {
         cost: 8,
@@ -877,7 +884,7 @@ pub fn generate_tiles() -> Vec<Tile> {
     tile_res.push(tile_2_0);
     tile_res.push(tile_2_1);
     tile_res.push(tile_2_2);
-    tile_res.push(tile_3_0);
+    // tile_res.push(tile_3_0);
     tile_res.push(tile_3_1);
     tile_res.push(tile_3_2);
     tile_res.push(tile_4_0);
@@ -888,12 +895,12 @@ pub fn generate_tiles() -> Vec<Tile> {
     tile_res.push(tile_5_2);
     tile_res.push(tile_6_0);
     tile_res.push(tile_6_1);
-    tile_res.push(tile_6_2);
+    // tile_res.push(tile_6_2);
     tile_res.push(tile_7_0);
     tile_res.push(tile_7_1);
     tile_res.push(tile_7_2);
     tile_res.push(tile_8_0);
-    tile_res.push(tile_8_1);
+    // tile_res.push(tile_8_1);
     tile_res.push(tile_8_2);
     tile_res.push(tile_9_0);
     tile_res.push(tile_9_1);
