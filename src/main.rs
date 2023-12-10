@@ -1,10 +1,11 @@
-use bevy::{prelude::*, sprite::MaterialMesh2dBundle, sprite::Anchor, ecs::system::EntityCommands, input::common_conditions::input_toggle_active, text::TextPlugin};
+use bevy::{prelude::*, input::common_conditions::input_toggle_active};
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_mod_picking::prelude::*;
 use bevy::{app::AppExit, log::LogPlugin};
 use tiles::{setup_tiles, on_tile_selected, tile_selected_close, on_tile_setup_complete,
-    TileSelected, TileSelectedBlockerClose, TileSetupComplete, VisitedTiles};
-use movement::{MovementPoints, update_movement_points, create_movement_points, MovementPointsUpdateEvent};
+    TileSelected, TileSelectedBlockerClose, TileSetupComplete, VisitedTiles, TileClosedEvent};
+use movement::{MovementPoints, update_movement_points, MovementPointsUpdateEvent, 
+    on_tile_closed_event, setup_movement_cards, DrawCardEvent, on_draw_card, MovementCardsDrawnEvent};
 use game_state::{GameState, GameStates};
 use turns::{TurnsLeft, TurnsUpdateEvent, update_turns_left};
 use ui::setup_game_ui;
@@ -38,21 +39,26 @@ fn main() {
         .add_systems(Startup, (
             setup,
             setup_game_ui,
+            setup_movement_cards,
             setup_tiles,))
         .add_event::<MovementPointsUpdateEvent>()
         .add_event::<TileSelected>()
         .add_event::<TileSelectedBlockerClose>()
         .add_event::<TileSetupComplete>()
         .add_event::<TurnsUpdateEvent>()
+        .add_event::<TileClosedEvent>()
+        .add_event::<DrawCardEvent>()
+        .add_event::<MovementCardsDrawnEvent>()
         .add_systems(
             Update,
             (
-                create_movement_points,
                 update_movement_points.run_if(on_event::<MovementPointsUpdateEvent>()),
                 update_turns_left.run_if(on_event::<TurnsUpdateEvent>()),
                 on_tile_selected.run_if(on_event::<TileSelected>()),
                 tile_selected_close.run_if(on_event::<TileSelectedBlockerClose>()),
                 on_tile_setup_complete.run_if(on_event::<TileSetupComplete>()),
+                on_tile_closed_event.run_if(on_event::<TileClosedEvent>()),
+                on_draw_card.run_if(on_event::<DrawCardEvent>()),
             ),
         )
         .run()

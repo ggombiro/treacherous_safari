@@ -1,12 +1,8 @@
-use std::fmt::Alignment;
 
-use crate::game_state::{GameState, GameStates};
-use crate::movement::{
-    create_movement_points, update_movement_points, MovementPoints, MovementPointsUpdateEvent,
-};
-use crate::turns::{TurnsLeft, TurnsUpdateEvent};
+use crate::movement::MovementPointsUpdateEvent;
+use crate::turns::TurnsUpdateEvent;
 use bevy::text::{BreakLineOn, Text2dBounds, TextLayoutInfo};
-use bevy::{ecs::system::EntityCommands, prelude::*, sprite::Anchor, sprite::MaterialMesh2dBundle};
+use bevy::{ecs::system::EntityCommands, prelude::*, sprite::Anchor};
 use bevy_mod_picking::prelude::*;
 use rand::Rng;
 
@@ -42,6 +38,9 @@ pub struct TileCover;
 
 #[derive(Event)]
 pub struct TileSetupComplete;
+
+#[derive(Event)]
+pub struct TileClosedEvent;
 
 #[derive(Resource)]
 pub struct VisitedTiles(pub Vec<u32>);
@@ -185,7 +184,7 @@ pub fn setup_tiles(
                                         custom_size: sprite_size,
                                         ..default()
                                     },
-                                    texture: asset_server.load("cardBack_blue1.png"),
+                                    texture: asset_server.load("cardBack_blue2.png"),
                                     transform: Transform::from_xyz(0.0, 0.0, 1.1),
                                     ..default()
                                 },
@@ -403,6 +402,7 @@ pub fn tile_selected_close(
     mut visited_tiles: ResMut<VisitedTiles>,
     mut movement_points_update: EventWriter<MovementPointsUpdateEvent>,
     mut turns_update: EventWriter<TurnsUpdateEvent>,
+    mut tile_closed: EventWriter<TileClosedEvent>,
 ) {
 
 
@@ -488,6 +488,8 @@ pub fn tile_selected_close(
             }
         },
     }
+
+    tile_closed.send(TileClosedEvent);
 }
 
 #[derive(Debug, Clone, Default)]
