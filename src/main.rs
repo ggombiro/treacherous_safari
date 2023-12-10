@@ -9,6 +9,7 @@ use movement::{MovementPoints, update_movement_points, MovementPointsUpdateEvent
 use game_state::{GameState, GameStates};
 use turns::{TurnsLeft, TurnsUpdateEvent, update_turns_left};
 use ui::setup_game_ui;
+use special_cards::{setup_special_cards, SpecialCardPlayedEvent, SpecialCardSelected};
 
 
 mod game_state;
@@ -16,6 +17,7 @@ mod movement;
 mod tiles;
 mod turns;
 mod ui;
+mod special_cards;
 
 
 fn main() {
@@ -39,6 +41,7 @@ fn main() {
         .add_systems(Startup, (
             setup,
             setup_game_ui,
+            setup_special_cards,
             setup_movement_cards,
             setup_tiles,))
         .add_event::<MovementPointsUpdateEvent>()
@@ -49,6 +52,7 @@ fn main() {
         .add_event::<TileClosedEvent>()
         .add_event::<DrawCardEvent>()
         .add_event::<MovementCardsDrawnEvent>()
+        .add_event::<SpecialCardSelected>()
         .add_systems(
             Update,
             (
